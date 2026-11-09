@@ -1,25 +1,20 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
+import { AppShell } from '@/components/app-shell'
+import { AutoScheduler } from '@/components/auto-scheduler'
+import { paypalConfigured } from '@/lib/config'
+import { getData } from '@/lib/data'
+import { todayISO } from '@/lib/dates'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.app',
+  title: { default: 'Tinku · Smart expenses & bill payments', template: '%s · Tinku' },
+  description: 'Track expenses, plan bills, choose how each bill is paid, and rehearse money emergencies before they happen.',
   icons: {
     icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
+      { url: '/icon-light-32x32.png', media: '(prefers-color-scheme: light)' },
+      { url: '/icon-dark-32x32.png', media: '(prefers-color-scheme: dark)' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
     ],
     apple: '/apple-icon.png',
   },
@@ -28,21 +23,24 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: 'light dark',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: 'black' },
+    { media: '(prefers-color-scheme: light)', color: '#f6f8fc' },
+    { media: '(prefers-color-scheme: dark)', color: '#0c111d' },
   ],
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const db = await getData()
+  const unread = db.notifications.filter((n) => !n.read).length
+  const demoLabel = paypalConfigured() ? 'PayPal Sandbox' : 'Demo payments'
   return (
-    <html lang="en">
+    <html lang="en-IN">
       <body className="antialiased">
-        {children}
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        <AppShell unread={unread} demoLabel={demoLabel}>
+          {children}
+        </AppShell>
+        <AutoScheduler lastRun={db.meta.lastSchedulerRun} today={todayISO()} />
+        {/* Vercel Analytics only works when hosted on Vercel (it 404s elsewhere, e.g. Render). */}
+        {process.env.VERCEL && <Analytics />}
       </body>
     </html>
   )
