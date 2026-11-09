@@ -7,6 +7,7 @@ import { Card, CardBody, CardHeader } from '@/components/ui/card'
 import { resetDemo, setDemoFailure } from '@/lib/actions/misc'
 import { paypalConfigured, paypalWebhookConfigured, receiptScanConfigured, zapierConfigured } from '@/lib/config'
 import { getData } from '@/lib/data'
+import { storageKind } from '@/lib/db'
 import { formatDateTime } from '@/lib/format'
 
 export const metadata: Metadata = { title: 'Settings' }
@@ -15,7 +16,18 @@ export default async function SettingsPage() {
   const db = await getData()
   const p = db.profile
 
+  const storage = storageKind()
   const connections = [
+    {
+      name: 'Data storage',
+      on: storage !== 'temporary',
+      onText:
+        storage === 'redis'
+          ? 'Saved in Upstash Redis: shared by every server and kept between deploys.'
+          : 'Saved to a file on this server (data/db.json).',
+      offText:
+        'Temporary: this host can’t write files, so data lives in /tmp and can reset or differ between servers. Add Upstash Redis (Vercel → Storage → Upstash for Redis) to keep it.',
+    },
     {
       name: 'PayPal Sandbox',
       on: paypalConfigured(),

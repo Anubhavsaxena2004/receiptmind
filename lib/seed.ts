@@ -1,7 +1,6 @@
 import { createOccurrence } from './bills'
 import { DEMO_INR_PER_USD } from './config'
 import { addDays, addMonths, nextDayOfMonth, todayISO } from './dates'
-import { newId } from './ids'
 import type {
   Bill,
   Budget,
@@ -20,6 +19,10 @@ import type {
 /** Demo data, dated relative to today so the demo always has something due. */
 export function createSeed(today = todayISO()): Db {
   const now = new Date().toISOString()
+  // Fixed IDs: every server instance that seeds gets the same IDs, so links stay valid
+  // even when a host (e.g. Vercel without a database) seeds separately per instance.
+  let seq = 0
+  const sid = (prefix: string) => `${prefix}_seed${String(++seq).padStart(3, '0')}`
   const at = (date: string, hour = 10) => new Date(`${date}T${String(hour).padStart(2, '0')}:00:00`).toISOString()
 
   const db: Db = {
@@ -99,7 +102,7 @@ export function createSeed(today = todayISO()): Db {
     date: string,
     attempt: number,
   ): Payment => ({
-    id: newId('pay'),
+    id: sid('pay'),
     occurrenceId: occ.id,
     billId: bill.id,
     label: bill.name,
@@ -124,7 +127,7 @@ export function createSeed(today = todayISO()): Db {
 
   for (const s of seeds) {
     const bill: Bill = {
-      id: newId('bill'),
+      id: sid('bill'),
       name: s.name,
       payee: s.payee,
       amount: s.amount,
@@ -141,10 +144,10 @@ export function createSeed(today = todayISO()): Db {
     if (s.lastCycle) {
       const months = s.frequency === 'quarterly' ? -3 : -1
       const prevDue = addMonths(s.due, months)
-      const prev: Occurrence = { id: newId('occ'), billId: bill.id, dueDate: prevDue, amount: s.amount, status: 'paid', resolvedAt: at(prevDue) }
+      const prev: Occurrence = { id: sid('occ'), billId: bill.id, dueDate: prevDue, amount: s.amount, status: 'paid', resolvedAt: at(prevDue) }
       db.occurrences.push(prev)
       const expense: Expense = {
-        id: newId('exp'),
+        id: sid('exp'),
         title: bill.name,
         amount: s.amount,
         category: bill.category,
@@ -171,14 +174,14 @@ export function createSeed(today = todayISO()): Db {
     }
 
     // Current (open) occurrence
-    const occ = createOccurrence(db, bill, s.due)
+    const occ = createOccurrence(db, bill, s.due, sid('occ'))
     if (s.status) occ.status = s.status
     if (s.note) occ.note = s.note
     if (s.status === 'due') occ.dueNotifiedAt = now
 
     if (s.mode === 'autopay') {
       const mandate: Mandate = {
-        id: newId('mnd'),
+        id: sid('mnd'),
         billId: bill.id,
         maxAmount: Math.ceil((s.amount * 1.2) / 50) * 50,
         status: 'active',
@@ -207,28 +210,28 @@ export function createSeed(today = todayISO()): Db {
   ]
   for (const [daysAgo, title, amount, cat, source] of spend) {
     const date = addDays(today, -daysAgo)
-    db.expenses.push({ id: newId('exp'), title, amount, category: cat, date, source, createdAt: at(date, 18) })
+    db.expenses.push({ id: sid('exp'), title, amount, category: cat, date, source, createdAt: at(date, 18) })
   }
   db.expenses.sort((a, b) => b.date.localeCompare(a.date))
   db.payments.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
   // A flat-share group
   const you: GroupMember = { id: 'mem_you', name: 'Riya', isYou: true }
-  const kabir: GroupMember = { id: newId('mem'), name: 'Kabir' }
-  const meera: GroupMember = { id: newId('mem'), name: 'Meera' }
-  const groupId = newId('grp')
+  const kabir: GroupMember = { id: sid('mem'), name: 'Kabir' }
+  const meera: GroupMember = { id: sid('mem'), name: 'Meera' }
+  const groupId = sid('grp')
   const everyone = [you.id, kabir.id, meera.id]
   db.groups.push({ id: groupId, name: 'Flat 302', members: [you, kabir, meera], createdAt: at(addMonths(today, -3)) })
   db.groupExpenses.push(
-    { id: newId('gex'), groupId, title: 'Cleaning supplies', amount: 600, paidBy: you.id, splitAmong: everyone, date: addDays(today, -1) },
-    { id: newId('gex'), groupId, title: 'Weekly groceries', amount: 2400, paidBy: you.id, splitAmong: everyone, date: addDays(today, -3) },
-    { id: newId('gex'), groupId, title: 'Cooking gas cylinder', amount: 1100, paidBy: meera.id, splitAmong: everyone, date: addDays(today, -5) },
-    { id: newId('gex'), groupId, title: 'Wi-Fi router', amount: 1800, paidBy: kabir.id, splitAmong: everyone, date: addDays(today, -8) },
+    { id: sid('gex'), groupId, title: 'Cleaning supplies', amount: 600, paidBy: you.id, splitAmong: everyone, date: addDays(today, -1) },
+    { id: sid('gex'), groupId, title: 'Weekly groceries', amount: 2400, paidBy: you.id, splitAmong: everyone, date: addDays(today, -3) },
+    { id: sid('gex'), groupId, title: 'Cooking gas cylinder', amount: 1100, paidBy: meera.id, splitAmong: everyone, date: addDays(today, -5) },
+    { id: sid('gex'), groupId, title: 'Wi-Fi router', amount: 1800, paidBy: kabir.id, splitAmong: everyone, date: addDays(today, -8) },
   )
 
   db.notifications.push(
     {
-      id: newId('ntf'),
+      id: sid('ntf'),
       at: now,
       kind: 'approval',
       title: 'Mobile recharge needs your approval',
@@ -237,7 +240,7 @@ export function createSeed(today = todayISO()): Db {
       read: false,
     },
     {
-      id: newId('ntf'),
+      id: sid('ntf'),
       at: now,
       kind: 'system',
       title: 'Welcome to Tinku',

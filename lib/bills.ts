@@ -41,8 +41,8 @@ export function currentMandate(db: Db, billId: string): Mandate | undefined {
     .sort((a, b) => b.authorizedAt.localeCompare(a.authorizedAt))[0]
 }
 
-export function createOccurrence(db: Db, bill: Bill, dueDate: string): Occurrence {
-  const occ: Occurrence = { id: newId('occ'), billId: bill.id, dueDate, amount: bill.amount, status: 'upcoming' }
+export function createOccurrence(db: Db, bill: Bill, dueDate: string, id = newId('occ')): Occurrence {
+  const occ: Occurrence = { id, billId: bill.id, dueDate, amount: bill.amount, status: 'upcoming' }
   db.occurrences.push(occ)
   return occ
 }

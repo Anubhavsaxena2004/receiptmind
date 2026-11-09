@@ -108,10 +108,13 @@ export function AppShell({
   children,
   unread,
   demoLabel,
+  storageWarning = false,
 }: {
   children: React.ReactNode
   unread: number
   demoLabel: string
+  /** True when data can't be saved permanently on this host (e.g. Vercel without Redis). */
+  storageWarning?: boolean
 }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
@@ -199,6 +202,14 @@ export function AppShell({
             </Link>
           </div>
         </header>
+        {storageWarning && (
+          <div role="status" className="border-b bg-warning-soft px-4 py-2 text-center text-xs font-medium text-warning sm:px-8">
+            Demo data is temporary on this deployment and may reset.{' '}
+            <Link href="/settings" className="underline underline-offset-2">
+              How to keep it
+            </Link>
+          </div>
+        )}
         <main className="mx-auto max-w-5xl px-4 py-6 sm:px-8 sm:py-8">{children}</main>
       </div>
     </div>

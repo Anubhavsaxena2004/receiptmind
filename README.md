@@ -31,7 +31,7 @@ pnpm install        # if corepack complains about keys: npx pnpm@12.3.4 install
 pnpm dev            # http://localhost:3000
 ```
 
-No keys are needed. Demo data is created on first load (dated around today) and saved to `data/db.json`. **Settings → Reset demo** restores it.
+No keys are needed. Demo data is created on first load (dated around today) and saved to `data/db.json` (or to Upstash Redis when configured; see Deploy). **Settings → Reset demo** restores it.
 
 Optional keys go in `.env.local`. See [.env.example](.env.example).
 
@@ -61,6 +61,13 @@ A deterministic day-by-day cash-flow simulation (`lib/rehearsal.ts`) over 30/60/
 4. **Crisis drill:** pick *Medical emergency ₹12,000*: "You'd run short by ₹…". Show the bills at risk, then the recovery plan making it pass. Try *Salary 30 days late* to show a bigger plan with a group contribution.
 5. **Expenses → Add:** scan a receipt (with `ANTHROPIC_API_KEY`), then save the same expense twice to show duplicate detection.
 
+## Deploy (Vercel)
+1. Import the GitHub repo in Vercel (framework: Next.js; defaults are fine).
+2. **Add storage:** project → **Storage → Upstash for Redis → Connect** (free tier is enough). Vercel adds `KV_REST_API_URL` and `KV_REST_API_TOKEN`, and Tinku saves its data there. Redeploy after connecting.
+3. Optional: add `APP_URL`, PayPal, `ANTHROPIC_API_KEY`, `ZAPIER_WEBHOOK_URL`, `CRON_SECRET` from [.env.example](.env.example).
+
+Without Redis the site still works, but Vercel can't write files: data lives in temporary `/tmp`, can reset, and separate server instances don't share changes. A yellow bar and **Settings → Data storage** say so.
+
 ## Deploy (Render)
 - **Web service:** build `pnpm install && pnpm build`, start `pnpm start`. Set `APP_URL` and any keys.
 - **Data:** Render's disk is temporary. Attach a persistent disk and set `TINKU_DATA_DIR` to it, or swap `lib/db.ts` for Postgres (the rest of the app only calls `readDb()` / `updateDb()`).
@@ -77,7 +84,7 @@ A deterministic day-by-day cash-flow simulation (`lib/rehearsal.ts`) over 30/60/
 ```
 app/                 one folder per page; api/ for PayPal return/cancel/webhook, scheduler, receipts
 components/          app shell, status badges, buttons, small UI parts
-lib/db.ts            JSON store with a write queue (swap for Postgres later)
+lib/db.ts            data store: Upstash Redis (conflict-checked) or a JSON file
 lib/payments.ts      checkout, verification, the single place payment outcomes are applied
 lib/paypal.ts        PayPal Orders v2 + webhook verification (server only)
 lib/scheduler.ts     daily reminders and AutoPay rules

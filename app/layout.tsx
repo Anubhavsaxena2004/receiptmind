@@ -4,6 +4,7 @@ import { AppShell } from '@/components/app-shell'
 import { AutoScheduler } from '@/components/auto-scheduler'
 import { paypalConfigured } from '@/lib/config'
 import { getData } from '@/lib/data'
+import { storageKind } from '@/lib/db'
 import { todayISO } from '@/lib/dates'
 import './globals.css'
 
@@ -35,7 +36,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
   return (
     <html lang="en-IN">
       <body className="antialiased">
-        <AppShell unread={unread} demoLabel={demoLabel}>
+        <AppShell unread={unread} demoLabel={demoLabel} storageWarning={storageKind() === 'temporary'}>
           {children}
         </AppShell>
         <AutoScheduler lastRun={db.meta.lastSchedulerRun} today={todayISO()} />
