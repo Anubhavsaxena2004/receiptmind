@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useActionState, useRef, useState } from 'react'
-import { LoaderCircle, ScanLine, Sparkles, TriangleAlert, Upload, X } from 'lucide-react'
+import { LoaderCircle, ScanLine, TriangleAlert, Upload, X } from 'lucide-react'
 import { Notice } from '@/components/bits'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -197,7 +197,7 @@ export function ExpenseForm({ today }: { today: string }) {
           ) : (
             <div className="flex flex-wrap gap-2 pt-1">
               <Button type="submit" size="lg" disabled={pending || scan.status === 'scanning'}>
-                {pending ? <LoaderCircle className="animate-spin" /> : source === 'receipt' ? <Sparkles /> : null}
+                {pending ? <LoaderCircle className="animate-spin" /> : source === 'receipt' ? <ScanLine className="size-4" /> : null}
                 Save expense
               </Button>
               <Link href="/expenses" className={buttonVariants({ variant: 'ghost', size: 'lg' })}>

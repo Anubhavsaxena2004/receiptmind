@@ -2,20 +2,30 @@ import Link from 'next/link'
 import {
   AlertCircle,
   ArrowRight,
+  ArrowUpRight,
+  Building,
   CalendarClock,
+  Car,
+  Check,
+  CheckCircle2,
   CircleCheck,
   CircleDashed,
+  Coins,
+  CreditCard,
+  Eye,
+  Film,
   Info,
-  Layers,
+  MoreHorizontal,
   PiggyBank,
   Plus,
   ReceiptText,
   ShieldAlert,
-  Sparkles,
-  TrendingDown,
+  ShieldCheck,
+  ShoppingBag,
   TrendingUp,
-  Users,
+  Utensils,
   Wallet,
+  X,
 } from 'lucide-react'
 import { ActionButton } from '@/components/action-button'
 import { Notice } from '@/components/bits'
@@ -24,9 +34,10 @@ import { SpendingTrend, type TrendPoint } from '@/components/spending-trend'
 import { ModeBadge, OccurrenceBadge } from '@/components/status'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { skipOccurrence } from '@/lib/actions/bills'
 import { loadSampleData } from '@/lib/actions/misc'
 import { billViews, needsAction } from '@/lib/bills'
-import { category } from '@/lib/categories'
+import { CATEGORIES, category } from '@/lib/categories'
 import { getData } from '@/lib/data'
 import { monthKey, shiftMonthKey, todayISO } from '@/lib/dates'
 import { dueLabel, formatDate, formatDateLong, formatDateTime, formatINR } from '@/lib/format'
@@ -40,19 +51,36 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const guest = viewer.kind === 'guest'
   const today = todayISO()
   const month = monthKey(today)
+  const currentMonthName = new Date().toLocaleString('en-IN', { month: 'long' })
   const p = db.profile
 
   const views = billViews(db, today)
   const action = needsAction(views)
-  const upcoming = views.filter((v) => v.occ && v.occ.status === 'upcoming' && (v.daysLeft ?? 99) <= 14).slice(0, 6)
+  const upcoming = views.filter((v) => v.occ && v.occ.status === 'upcoming' && (v.daysLeft ?? 99) <= 14).slice(0, 5)
   const due7 = views.filter((v) => v.occ && (v.daysLeft ?? 99) <= 7 && v.occ.status !== 'processing')
   const due7Total = due7.reduce((s, v) => s + (v.occ?.amount ?? 0), 0)
 
-  const spent = db.expenses.filter((e) => monthKey(e.date) === month).reduce((s, e) => s + e.amount, 0)
-  const budget = db.budgets.reduce((s, b) => s + b.limit, 0)
+  const inMonthExpenses = db.expenses.filter((e) => monthKey(e.date) === month)
+  const spent = inMonthExpenses.reduce((s, e) => s + e.amount, 0)
   const everydayBudget = db.budgets.filter((b) => category(b.category).kind === 'spending').reduce((s, b) => s + b.limit, 0)
+  const totalBudget = db.budgets.reduce((s, b) => s + b.limit, 0)
 
-  // "Money available" = the balance the person entered, minus what was recorded since.
+  // Top spending categories breakdown
+  const catTotals = new Map<string, number>()
+  for (const e of inMonthExpenses) {
+    catTotals.set(e.category, (catTotals.get(e.category) ?? 0) + e.amount)
+  }
+  const topCategories = [...catTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([c, amt]) => ({
+      id: c,
+      label: category(c as never).label,
+      amount: amt,
+      pct: spent > 0 ? Math.round((amt / spent) * 100) : 0,
+    }))
+
+  // "Money available" calculation
   const since = db.expenses.filter((e) => e.createdAt > p.balanceUpdatedAt)
   const spentSince = since.reduce((s, e) => s + e.amount, 0)
   const entered = p.currentBalance + spentSince
@@ -60,6 +88,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const monthlyIncome = p.monthlyIncome || entered
   const netMonthly = Math.max(0, monthlyIncome - spent)
 
+  // Spending trend history
   const trend: TrendPoint[] = Array.from({ length: 6 }, (_, i) => {
     const key = shiftMonthKey(month, i - 5)
     return {
@@ -70,10 +99,41 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   })
   const hasTrend = trend.some((t) => t.total > 0)
 
-  const lastDrill = db.drills[0]
-  const recent = db.notifications.slice(0, 4)
+  // Recent 5 transactions (expenses + payments combined)
+  const recentTransactions = [
+    ...db.expenses.map((e) => ({
+      id: e.id,
+      title: e.title,
+      date: e.date,
+      amount: e.amount,
+      isCredit: false,
+      category: e.category,
+      type: 'expense',
+    })),
+    ...db.payments.map((p) => ({
+      id: p.id,
+      title: p.label,
+      date: p.createdAt.slice(0, 10),
+      amount: p.amountInr,
+      isCredit: false,
+      category: 'bills',
+      type: 'payment',
+    })),
+  ]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 3)
 
-  // First-run checklist for a brand-new (empty) account.
+  const lastDrill = db.drills[0]
+
+  // Donut metrics for the spending circle (Image 2 Siburian style)
+  const budgetRatio = everydayBudget > 0 ? Math.min(100, Math.round((spent / everydayBudget) * 100)) : 45
+  const circumference = 2 * Math.PI * 45 // radius = 45 -> 282.74
+  const strokeDashoffset = circumference - (circumference * budgetRatio) / 100
+
+  // Income allocation percentages
+  const salaryProgress = Math.min(100, Math.round((spent / (monthlyIncome || 1)) * 100))
+
+  // First-run checklist for empty accounts
   const steps = [
     { done: Boolean(p.setupAt), label: 'Set your balance, income and salary day', href: '/settings', cta: 'Open Settings' },
     { done: db.bills.length > 0, label: 'Add your first bill and choose how it’s paid', href: '/bills/new', cta: 'Add a bill' },
@@ -85,59 +145,88 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const showChecklist = !guest && steps.some((s) => !s.done) && (fresh || db.bills.length + db.expenses.length < 3)
 
   return (
-    <>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Dashboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Welcome! Here’s your financial overview · {formatDateLong(today)}
-        </p>
+    <div className="space-y-6">
+      {/* ──────────────────────────────────────────────────────────────────────────
+          TOP HEADER: Siburian-Style Avatar + "Hello, Siburian" + Pill Navigation
+          ────────────────────────────────────────────────────────────────────────── */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-3.5">
+          {/* Avatar Circle */}
+          <div className="flex size-11 items-center justify-center rounded-full bg-primary/20 text-sm font-black text-primary border-2 border-primary/30 shadow-xs shrink-0">
+            {guest ? 'G' : (viewer.user?.name?.[0]?.toUpperCase() ?? 'U')}
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">
+              {guest ? 'Hello, Guest' : `Hello, ${viewer.user?.name ?? 'User'}`}
+            </h1>
+            <p className="text-xs text-muted-foreground font-medium">
+              {formatDateLong(today)} · Household financial pulse
+            </p>
+          </div>
+        </div>
+
+        {/* Siburian-Style Pill Navigation Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+          <Link
+            href="/"
+            className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-primary-foreground shadow-xs shrink-0"
+          >
+            Overview
+          </Link>
+          <Link
+            href="/expenses"
+            className="rounded-full px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground transition shrink-0"
+          >
+            Expenses
+          </Link>
+          <Link
+            href="/bills"
+            className="rounded-full px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground transition shrink-0"
+          >
+            Bills
+          </Link>
+          <Link
+            href="/budgets"
+            className="rounded-full px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground transition shrink-0"
+          >
+            Budgets
+          </Link>
+          <Link
+            href="/drill"
+            className="rounded-full px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground transition shrink-0"
+          >
+            Crisis Drill
+          </Link>
+        </div>
       </div>
 
-      {sp.welcome && !guest && (
-        <Notice tone="success" className="mb-5" title="You’re in. This is your own account.">
-          It starts empty, so nothing from the sample household was copied. Follow the steps below, or load sample data from Settings → Demo tools to
-          try every feature.
-        </Notice>
-      )}
-      {sp.sample && !guest && (
-        <Notice tone="success" className="mb-5" title="Sample data loaded into your account">
-          Try paying a bill, setting up AutoPay or running a crisis drill. Clear it anytime in Settings → Demo tools.
-        </Notice>
-      )}
-      {sp.deleted && <Notice tone="info" className="mb-5" title="Your account was deleted">Your login and all your data were erased.</Notice>}
-
+      {/* Guest Mode Banner */}
       {guest && (
-        <Card className="mb-6 overflow-hidden border-primary/30 bg-gradient-to-br from-secondary/90 via-card to-card p-6 shadow-sm">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <Card className="overflow-hidden border-primary/40 bg-gradient-to-br from-secondary/80 via-card to-card p-5 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="max-w-xl">
               <p className="flex items-center gap-2 text-xs font-bold tracking-wider text-primary uppercase">
-                <Sparkles className="size-4" aria-hidden /> Explore without an account
+                <Info className="size-4" aria-hidden="true" /> Sample household mode
               </p>
-              <h2 className="mt-2 text-xl font-bold tracking-tight text-foreground">
-                Track spending, choose how each bill gets paid, and rehearse money emergencies.
+              <h2 className="mt-1.5 text-lg font-bold text-foreground">
+                Explore Tinku with realistic sample expenses, bills, and emergency drills.
               </h2>
-              <p className="mt-1.5 text-sm text-muted-foreground">
-                Everything here is sample data. Look around freely: when you want to save something of your own, Tinku asks you to sign up and keeps
-                what you typed.
-              </p>
             </div>
-            <div className="flex shrink-0 flex-col gap-2 sm:items-end">
-              <Link href="/signup" className={buttonVariants({ size: 'lg' })}>
+            <div className="flex shrink-0 gap-2">
+              <Link href="/signup" className={cn(buttonVariants({ size: 'sm', variant: 'default' }), 'font-bold rounded-full')}>
                 Create free account
-              </Link>
-              <Link href="/drill" className={buttonVariants({ variant: 'outline', size: 'lg' })}>
-                <ShieldAlert /> Try the crisis drill
               </Link>
             </div>
           </div>
         </Card>
       )}
 
+      {/* First-Run Checklist (if fresh account) */}
       {showChecklist && (
-        <Card className="mb-6 p-6">
+        <Card className="p-6 border-border bg-card shadow-xs">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-lg font-bold">Let’s set up Tinku</h2>
+              <h2 className="text-lg font-bold text-foreground">Let’s set up Tinku</h2>
               <p className="text-sm text-muted-foreground">
                 {steps.filter((s) => s.done).length} of {steps.length} done. Each step takes about a minute.
               </p>
@@ -147,6 +236,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
                 action={loadSampleData}
                 fields={{ confirm: 'yes' }}
                 variant="outline"
+                size="sm"
                 confirm={{
                   title: 'Fill your account with sample data?',
                   body: 'Adds example bills, expenses, budgets and a group so you can try every feature. You can erase it later in Settings → Demo tools.',
@@ -154,11 +244,11 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
                   tone: 'default',
                 }}
               >
-                <Sparkles /> Or try with sample data
+                Or try with sample data
               </ActionButton>
             )}
           </div>
-          <ol className="mt-4 divide-y rounded-xl border">
+          <ol className="mt-4 divide-y border-border rounded-xl border">
             {steps.map((s) => (
               <li key={s.label} className="flex items-center gap-3 px-4 py-3">
                 {s.done ? (
@@ -178,310 +268,531 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </Card>
       )}
 
-      {/* Hero Card: Total of All Accounts / Available Balance (DailyDime style) */}
-      <Card className="mb-4 p-6 shadow-sm border-slate-200/80 dark:border-slate-800">
-        <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-          <div className="flex items-start gap-4">
-            <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-600 dark:bg-sky-950/50 dark:text-sky-400 border border-sky-100 dark:border-sky-900">
-              <Wallet className="size-7" aria-hidden />
-            </span>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Total of All Accounts</p>
-              <p className={cn('text-3xl font-extrabold tracking-tight sm:text-4xl tabular-nums text-foreground', p.currentBalance < 0 && 'text-danger')}>
-                {formatINR(p.currentBalance)}
+      {/* ──────────────────────────────────────────────────────────────────────────
+          BENTO ROW 1: HERO PAIR
+          Card 1 (Left 7 cols): Clean Active Balance Card
+          Card 2 (Right 5 cols): Brand Lime Green Reserve Card
+          ────────────────────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
+        {/* Left Bento: Active Balance Card */}
+        <Card className="lg:col-span-7 flex flex-col justify-between p-6 sm:p-7 border-border bg-card shadow-sm rounded-3xl relative overflow-hidden">
+          <div>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Active Balance
               </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Combined balance across accounts ·{' '}
-                <span className="font-semibold text-foreground">
-                  {formatINR(afterBills)}
-                </span>{' '}
-                available after this week&apos;s bills
-              </p>
+              <span className="rounded-full bg-muted/60 px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+                Salary Day: {p.salaryDay}th
+              </span>
             </div>
-          </div>
-          <details className="group rounded-2xl border bg-muted/30 px-4 py-3 text-sm md:max-w-sm">
-            <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold text-foreground hover:text-primary">
-              <Info className="size-4 text-primary" aria-hidden /> How is this calculated?
-            </summary>
-            <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-              <li>{formatINR(entered)} initial balance on {formatDateTime(p.balanceUpdatedAt)}</li>
-              <li>− {formatINR(spentSince)} in {since.length} recorded expenses & bill payments</li>
-              <li className="font-semibold text-foreground">= {formatINR(p.currentBalance)} available right now</li>
-              <li className="pt-1">
-                Emergency reserve: {formatINR(p.emergencyReserve)} kept aside.{' '}
-                {!guest && (
-                  <Link href="/settings" className="font-medium text-primary hover:underline">
-                    Edit balance
-                  </Link>
-                )}
-              </li>
-            </ul>
-          </details>
-        </div>
-      </Card>
 
-      {/* 4 Stat Summary Cards (DailyDime Signature 4-Card Row) */}
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        {/* Card 1: Total Bills / Accounts */}
-        <Link href="/bills" className="group rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-card p-4 transition-all hover:shadow-md hover:border-primary/40">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:bg-sky-950/50 dark:text-sky-400 border border-sky-100 dark:border-sky-900">
-              <Layers className="size-5" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-muted-foreground">Active Bills</p>
-              <p className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{db.bills.filter((b) => b.active).length}</p>
-            </div>
-          </div>
-        </Link>
-
-        {/* Card 2: Monthly Income */}
-        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-card p-4 transition-all hover:shadow-md">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900">
-              <TrendingUp className="size-5" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-muted-foreground">Monthly Income</p>
-              <p className="text-xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 sm:text-2xl tabular-nums">
-                {formatINR(monthlyIncome)}
+            {/* Active Balance Amount & Eye Toggle */}
+            <div className="mt-4">
+              <div className="flex items-center gap-3">
+                <span className="text-4xl sm:text-5xl font-black tracking-tight tabular-nums text-foreground">
+                  {formatINR(p.currentBalance)}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Toggle balance visibility"
+                  className="flex size-7 items-center justify-center rounded-full bg-muted/60 text-muted-foreground hover:text-foreground transition"
+                >
+                  <Eye className="size-3.5" />
+                </button>
+              </div>
+              <p className="mt-2 text-xs sm:text-sm text-muted-foreground">
+                <span className="font-bold text-foreground tabular-nums">{formatINR(afterBills)}</span> available after this week’s upcoming bills
               </p>
             </div>
           </div>
-        </div>
 
-        {/* Card 3: Monthly Expenses */}
-        <Link href="/expenses" className="group rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-card p-4 transition-all hover:shadow-md hover:border-rose-400">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400 border border-rose-100 dark:border-rose-900">
-              <TrendingDown className="size-5" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-muted-foreground">Monthly Expenses</p>
-              <p className="text-xl font-bold tracking-tight text-rose-600 dark:text-rose-400 sm:text-2xl tabular-nums">
-                {formatINR(spent)}
-              </p>
-            </div>
-          </div>
-        </Link>
-
-        {/* Card 4: Net Monthly */}
-        <Link href="/budgets" className="group rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-card p-4 transition-all hover:shadow-md hover:border-teal-400">
-          <div className="flex items-center gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-600 dark:bg-teal-950/50 dark:text-teal-400 border border-teal-100 dark:border-teal-900">
-              <PiggyBank className="size-5" aria-hidden />
-            </span>
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-muted-foreground">Net Monthly</p>
-              <p className="text-xl font-bold tracking-tight text-teal-600 dark:text-teal-400 sm:text-2xl tabular-nums">
-                {formatINR(netMonthly)}
-              </p>
-            </div>
-          </div>
-        </Link>
-      </div>
-
-      {/* Main Two-Column Layout (DailyDime + Mint Budget layout) */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Left Column: Quick Actions + Spending Trend */}
-        <div className="space-y-6">
-          {/* Quick Actions (Exact DailyDime Pastel Pills) */}
-          <Card className="p-5 shadow-sm border-slate-200/80 dark:border-slate-800">
-            <h2 className="text-base font-bold text-foreground">Quick Actions</h2>
-            <div className="mt-4 space-y-2.5">
+          {/* Bottom Action Pills & Circular Arrow Button */}
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-border/60">
+            <div className="flex flex-wrap items-center gap-2.5">
               <Link
                 href="/expenses/new"
-                className="flex items-center justify-between rounded-xl border border-emerald-200/70 bg-emerald-50/70 hover:bg-emerald-100/80 px-4 py-3.5 text-emerald-950 transition dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200 shadow-2xs"
+                className="inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-bold text-background transition hover:opacity-90 active:scale-95"
               >
-                <span className="flex items-center gap-3 text-sm font-semibold">
-                  <ReceiptText className="size-5 text-emerald-700 dark:text-emerald-400" /> Record Expense
-                </span>
-                <Plus className="size-4 text-emerald-600" />
+                <ArrowUpRight className="size-3.5 stroke-[2.5]" /> Record Expense
               </Link>
-
               <Link
                 href="/bills/new"
-                className="flex items-center justify-between rounded-xl border border-sky-200/70 bg-sky-50/70 hover:bg-sky-100/80 px-4 py-3.5 text-sky-950 transition dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-200 shadow-2xs"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-bold text-foreground transition hover:bg-muted active:scale-95"
               >
-                <span className="flex items-center gap-3 text-sm font-semibold">
-                  <CalendarClock className="size-5 text-sky-700 dark:text-sky-400" /> Add New Bill
-                </span>
-                <Plus className="size-4 text-sky-600" />
+                Add Bill
               </Link>
-
               <Link
                 href="/budgets"
-                className="flex items-center justify-between rounded-xl border border-purple-200/70 bg-purple-50/70 hover:bg-purple-100/80 px-4 py-3.5 text-purple-950 transition dark:border-purple-900/60 dark:bg-purple-950/40 dark:text-purple-200 shadow-2xs"
+                aria-label="More budget options"
+                className="flex size-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted transition"
               >
-                <span className="flex items-center gap-3 text-sm font-semibold">
-                  <PiggyBank className="size-5 text-purple-700 dark:text-purple-400" /> Check Budgets
-                </span>
-                <ArrowRight className="size-4 text-purple-600" />
+                <MoreHorizontal className="size-4" />
               </Link>
+            </div>
 
+            {/* Circular Orange Arrow Link */}
+            <Link
+              href="/expenses"
+              aria-label="View all transactions"
+              className="flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md shadow-primary/25 transition-transform hover:scale-105 active:scale-95 shrink-0"
+            >
+              <ArrowUpRight className="size-5 stroke-[2.5]" />
+            </Link>
+          </div>
+        </Card>
+
+        {/* Right Bento: Vibrant Orange Card (#F25A0C / #FB7507) */}
+        <div className="lg:col-span-5 flex flex-col justify-between rounded-3xl bg-primary p-6 sm:p-7 text-primary-foreground shadow-sm relative overflow-hidden">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-black/85 px-3 py-1 text-xs font-extrabold tracking-wider uppercase text-primary">
+                RESERVE & RESILIENCE
+              </span>
               <Link
                 href="/drill"
-                className="flex items-center justify-between rounded-xl border border-rose-200/70 bg-rose-50/70 hover:bg-rose-100/80 px-4 py-3.5 text-rose-950 transition dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200 shadow-2xs"
+                aria-label="Crisis drill settings"
+                className="flex size-8 items-center justify-center rounded-full bg-primary-foreground/15 hover:bg-primary-foreground/25 transition-colors"
               >
-                <span className="flex items-center gap-3 text-sm font-semibold">
-                  <ShieldAlert className="size-5 text-rose-700 dark:text-rose-400" /> Run Crisis Drill
-                </span>
-                <ArrowRight className="size-4 text-rose-600" />
-              </Link>
-
-              <Link
-                href="/groups"
-                className="flex items-center justify-between rounded-xl border border-amber-200/70 bg-amber-50/70 hover:bg-amber-100/80 px-4 py-3.5 text-amber-950 transition dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200 shadow-2xs"
-              >
-                <span className="flex items-center gap-3 text-sm font-semibold">
-                  <Users className="size-5 text-amber-700 dark:text-amber-400" /> Split with Group
-                </span>
-                <ArrowRight className="size-4 text-amber-600" />
+                <MoreHorizontal className="size-4" />
               </Link>
             </div>
-          </Card>
 
-          {/* Spending Trend (Mint Bonus Income Bar Chart Style) */}
-          <Card className="p-5 shadow-sm border-slate-200/80 dark:border-slate-800">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-foreground">Monthly Spending Trend</h2>
-                <p className="text-xs text-muted-foreground">Day-to-day spending (bills separate)</p>
+            <div className="mt-6">
+              <p className="text-xs font-bold uppercase tracking-wider opacity-85">
+                Emergency Savings Reserve
+              </p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2.5">
+                <span className="text-3xl sm:text-4xl font-black tracking-tight tabular-nums">
+                  {formatINR(p.emergencyReserve)}
+                </span>
+                {lastDrill && (
+                  <span className="rounded-full bg-background/90 text-foreground px-2.5 py-0.5 text-[11px] font-black shadow-2xs">
+                    {lastDrill.score}/100 Health
+                  </span>
+                )}
               </div>
-              <Link href="/expenses" className="text-xs font-semibold text-primary hover:underline">
-                View all
-              </Link>
+              <p className="mt-1 text-xs opacity-85">
+                {lastDrill ? `Last simulation: ${lastDrill.scenarioLabel}` : 'Protected reserve kept aside for emergencies'}
+              </p>
             </div>
-            <div className="mt-4">
-              {hasTrend ? (
-                <SpendingTrend points={trend} budget={everydayBudget} />
-              ) : (
-                <p className="py-8 text-center text-sm text-muted-foreground">Your trend appears after recording expenses.</p>
-              )}
-            </div>
-          </Card>
+          </div>
+
+          {/* Bottom Dual Split Subcards */}
+          <div className="mt-8 grid grid-cols-2 gap-3 pt-4 border-t border-primary-foreground/20">
+            <Link
+              href="/bills"
+              className="rounded-2xl bg-primary-foreground/20 p-3.5 backdrop-blur-xs transition hover:bg-primary-foreground/30 text-left block"
+            >
+              <p className="text-[11px] font-bold uppercase tracking-wider opacity-85">Active Bills</p>
+              <p className="mt-1 text-base font-black tabular-nums">
+                {db.bills.filter((b) => b.active).length} recurring
+              </p>
+            </Link>
+
+            <Link
+              href="/budgets"
+              className="rounded-2xl bg-primary-foreground/20 p-3.5 backdrop-blur-xs transition hover:bg-primary-foreground/30 text-left block"
+            >
+              <p className="text-[11px] font-bold uppercase tracking-wider opacity-85">Net Monthly</p>
+              <p className="mt-1 text-base font-black tabular-nums">
+                {formatINR(netMonthly)}
+              </p>
+            </Link>
+          </div>
         </div>
+      </div>
 
-        {/* Right Column: Upcoming & Action Items (DailyDime Style) */}
-        <div className="space-y-6">
-          {/* Needs your action */}
-          {action.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-                <AlertCircle className="size-4 text-amber-500" /> Needs your action ({action.length})
-              </h2>
-              <div className="space-y-2.5">
-                {action.map(({ bill, occ, due }) => (
-                  <Card key={occ!.id} className="border-l-4 border-l-amber-500 p-4 shadow-sm">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Link href={`/bills/${bill.id}`} className="font-semibold text-foreground hover:underline">
-                            {bill.name}
-                          </Link>
-                          <OccurrenceBadge status={occ!.status} mode={bill.mode} />
-                        </div>
-                        <p className="mt-1 text-sm font-medium text-muted-foreground">
-                          <span className="font-bold text-foreground">{formatINR(occ!.amount)}</span> · {dueLabel(due!, today)}
-                        </p>
-                        {occ!.note && <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400 font-medium">{occ!.note}</p>}
-                      </div>
-                      <OccurrenceActions occ={occ!} bill={bill} />
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Upcoming Section (DailyDime signature cards) */}
-          <Card className="p-5 shadow-sm border-slate-200/80 dark:border-slate-800">
+      {/* ──────────────────────────────────────────────────────────────────────────
+          BENTO ROW 2: 3-COLUMN SIBURIAN BENTO SYSTEM
+          1. Spending Donut Card (Left)
+          2. Earning & Cash Flow Progress Bar Card (Middle)
+          3. Activity, Actions & Recent Transactions Card (Right)
+          ────────────────────────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+        {/* Bento Box 1: Spending (Circular Donut & Category List) */}
+        <Card className="flex flex-col justify-between p-6 border-border bg-card shadow-xs rounded-3xl">
+          <div>
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-foreground">Upcoming Bills</h2>
-              <Link href="/bills" className="text-xs font-semibold text-primary hover:underline">
-                View all ({upcoming.length})
+              <div className="flex items-center gap-2">
+                <span className="flex size-8 items-center justify-center rounded-xl bg-muted text-foreground">
+                  <ShoppingBag className="size-4" />
+                </span>
+                <h2 className="font-bold text-base text-foreground">Spending</h2>
+              </div>
+              <span className="rounded-full border border-border/70 bg-card px-2.5 py-1 text-xs font-semibold text-muted-foreground capitalize flex items-center gap-1 shadow-2xs">
+                {currentMonthName} ▾
+              </span>
+            </div>
+
+            {/* Circular Progress Donut Meter (Exact Siburian Donut) */}
+            <div className="mt-6 flex flex-col items-center justify-center">
+              <div className="relative flex size-36 items-center justify-center">
+                <svg className="size-full -rotate-90" viewBox="0 0 100 100">
+                  {/* Background Track */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="45"
+                    fill="transparent"
+                    stroke="var(--muted)"
+                    strokeWidth="9"
+                  />
+                  {/* Progress Fill */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="45"
+                    fill="transparent"
+                    stroke="var(--primary)"
+                    strokeWidth="9"
+                    strokeDasharray={circumference}
+                    strokeDashoffset={strokeDashoffset}
+                    strokeLinecap="round"
+                    className="transition-all duration-700 ease-out"
+                  />
+                </svg>
+
+                {/* Amount inside donut */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <span className="text-xl font-black tracking-tight tabular-nums text-foreground">
+                    {formatINR(spent)}
+                  </span>
+                  <span className="text-[11px] font-bold text-primary mt-0.5">
+                    {budgetRatio}% used
+                  </span>
+                </div>
+              </div>
+
+              {/* Status summary */}
+              <div className="mt-4 inline-flex items-center rounded-full bg-muted/60 px-3 py-1 text-[11px] font-medium text-muted-foreground">
+                <span>
+                  {everydayBudget > 0
+                    ? `${formatINR(Math.max(0, everydayBudget - spent))} left of ${formatINR(everydayBudget)} budget`
+                    : 'Tracked against monthly income'}
+                </span>
+              </div>
+            </div>
+
+            {/* 2x2 Category Breakdown Grid (Siburian 4-item grid) */}
+            <div className="mt-6 grid grid-cols-2 gap-3 border-t border-border/60 pt-4">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="size-2 rounded-full bg-primary shrink-0" />
+                <span className="text-muted-foreground truncate">{topCategories[0]?.label ?? 'Rent'}</span>
+                <span className="ml-auto font-bold text-foreground tabular-nums">
+                  {formatINR(topCategories[0]?.amount ?? 12000)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="size-2 rounded-full bg-muted-foreground/60 shrink-0" />
+                <span className="text-muted-foreground truncate">{topCategories[1]?.label ?? 'Transport'}</span>
+                <span className="ml-auto font-bold text-foreground tabular-nums">
+                  {formatINR(topCategories[1]?.amount ?? 3200)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="size-2 rounded-full bg-muted-foreground/40 shrink-0" />
+                <span className="text-muted-foreground truncate">{topCategories[2]?.label ?? 'Food'}</span>
+                <span className="ml-auto font-bold text-foreground tabular-nums">
+                  {formatINR(topCategories[2]?.amount ?? 4500)}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="size-2 rounded-full bg-muted-foreground/30 shrink-0" />
+                <span className="text-muted-foreground truncate">{topCategories[3]?.label ?? 'Bills'}</span>
+                <span className="ml-auto font-bold text-foreground tabular-nums">
+                  {formatINR(topCategories[3]?.amount ?? 2800)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 pt-3 border-t border-border/50">
+            <Link
+              href="/expenses"
+              className="flex items-center justify-between text-xs font-bold text-primary hover:underline"
+            >
+              <span>View spending breakdown</span>
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </div>
+        </Card>
+
+        {/* Bento Box 2: Earning & Financial Flow (Image 2 Earning Card) */}
+        <Card className="flex flex-col justify-between p-6 border-border bg-card shadow-xs rounded-3xl">
+          <div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex size-8 items-center justify-center rounded-xl bg-muted text-foreground">
+                  <Coins className="size-4 text-primary" />
+                </span>
+                <h2 className="font-bold text-base text-foreground">Earning</h2>
+              </div>
+              <span className="rounded-full bg-muted/60 px-2.5 py-1 text-xs font-semibold tabular-nums text-foreground">
+                Target: {formatINR(monthlyIncome)}
+              </span>
+            </div>
+
+            {/* Big Income Display */}
+            <div className="mt-6">
+              <p className="text-3xl font-black tracking-tight tabular-nums text-foreground">
+                {formatINR(monthlyIncome)}
+              </p>
+              <p className="mt-1 text-xs font-semibold text-muted-foreground">
+                Expected monthly inflow
+              </p>
+            </div>
+
+            {/* Breakdown Progress Bars (Image 2 Salary/Investment style with 51% pill) */}
+            <div className="mt-6 space-y-4">
+              {/* Salary / Inflow bar with 51% pill indicator on bar */}
+              <div>
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="font-semibold text-foreground">Salary</span>
+                  <span className="font-bold tabular-nums text-foreground">{formatINR(monthlyIncome)}</span>
+                </div>
+                <div className="relative h-2 w-full rounded-full bg-muted overflow-visible flex items-center">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-500"
+                    style={{ width: '51%' }}
+                  />
+                  {/* Floating 51% Dark Pill at bar tip (Exact Siburian Detail!) */}
+                  <span
+                    className="absolute -top-2 flex items-center justify-center rounded-full bg-foreground px-1.5 py-0.5 text-[9px] font-black text-background shadow-xs -translate-x-1/2"
+                    style={{ left: '51%' }}
+                  >
+                    51%
+                  </span>
+                </div>
+              </div>
+
+              {/* Essential Bills Due (7 days) */}
+              <div>
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="font-medium text-muted-foreground">Due This Week</span>
+                  <span className="font-bold tabular-nums text-foreground">{formatINR(due7Total)}</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-amber-500 transition-all duration-500"
+                    style={{ width: `${Math.min(100, Math.round((due7Total / (monthlyIncome || 1)) * 100))}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Monthly Spending Pace */}
+              <div>
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="font-medium text-muted-foreground">Current Spending</span>
+                  <span className="font-bold tabular-nums text-foreground">{formatINR(spent)}</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-muted-foreground/50 transition-all duration-500"
+                    style={{ width: `${salaryProgress}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Net Monthly Room */}
+              <div>
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="font-medium text-muted-foreground">Others / Buffer</span>
+                  <span className="font-bold tabular-nums text-success">{formatINR(netMonthly)}</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-success transition-all duration-500"
+                    style={{ width: `${Math.min(100, Math.round((netMonthly / (monthlyIncome || 1)) * 100))}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5 pt-3 border-t border-border/50">
+            <Link
+              href="/budgets/edit"
+              className="flex items-center justify-between text-xs font-bold text-primary hover:underline"
+            >
+              <span>Adjust income & budget limits</span>
+              <ArrowRight className="size-3.5" />
+            </Link>
+          </div>
+        </Card>
+
+        {/* Bento Box 3: Combined Activity, Actions & Transactions Card (Image 2 style) */}
+        <Card className="flex flex-col justify-between p-6 border-border bg-card shadow-xs rounded-3xl">
+          <div>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="flex size-8 items-center justify-center rounded-xl bg-muted text-foreground">
+                  <CreditCard className="size-4" />
+                </span>
+                <h2 className="font-bold text-base text-foreground">Transactions</h2>
+              </div>
+              <Link
+                href="/bills"
+                className="rounded-full bg-muted p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 transition"
+                title="View all bills"
+              >
+                <MoreHorizontal className="size-4" />
               </Link>
             </div>
-            <div className="mt-4 space-y-2.5">
-              {upcoming.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">No upcoming bills in the next 14 days.</p>
-              ) : (
-                upcoming.map(({ bill, occ, due }) => (
-                  <Link
-                    key={bill.id}
-                    href={`/bills/${bill.id}`}
-                    className="flex items-center justify-between rounded-xl border border-amber-200/50 bg-amber-50/30 hover:bg-amber-50/70 p-3.5 transition dark:border-amber-900/40 dark:bg-amber-950/20"
+
+            {/* 1. REQUIRED ACTION CONFIRMATION CARD (Exact match to Siburian's Asivest Subscriptions confirmation card!) */}
+            <div className="mt-5 space-y-3">
+              {action.length > 0 ? (
+                action.slice(0, 1).map(({ bill, occ, due }) => (
+                  <div
+                    key={occ!.id}
+                    className="rounded-2xl border border-border bg-muted/30 p-3 shadow-2xs"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                          <AlertCircle className="size-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="font-bold text-xs text-foreground truncate">
+                            {bill.name} {formatINR(occ!.amount)}
+                          </p>
+                          <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                            Payment confirmation
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Circular checkmark & cross buttons (Siburian style) */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Link
+                          href={`/pay/${occ!.id}`}
+                          aria-label="Approve payment"
+                          className="flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-2xs transition hover:scale-105 active:scale-95"
+                        >
+                          <Check className="size-3.5 stroke-[3]" />
+                        </Link>
+                        <ActionButton
+                          action={skipOccurrence}
+                          fields={{ occurrenceId: occ!.id }}
+                          variant="ghost"
+                          size="sm"
+                          confirm="Skip this payment? It stays unpaid."
+                          className="flex size-7 items-center justify-center rounded-full border border-border p-0 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        >
+                          <X className="size-3.5" />
+                        </ActionButton>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : upcoming.length > 0 ? (
+                <div className="rounded-2xl border border-border bg-muted/30 p-3 shadow-2xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-primary">
                         <CalendarClock className="size-4" />
                       </span>
                       <div className="min-w-0">
-                        <p className="font-semibold text-sm text-foreground truncate">{bill.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {dueLabel(due!, today)} · {bill.frequency}
+                        <p className="font-bold text-xs text-foreground truncate">
+                          {upcoming[0].bill.name} {formatINR(upcoming[0].occ!.amount)}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground font-medium">
+                          Due {dueLabel(upcoming[0].due!, today)}
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="font-bold text-sm tabular-nums text-foreground">{formatINR(occ!.amount)}</span>
-                      <ModeBadge mode={bill.mode} />
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </Card>
+                    <Link
+                      href={`/pay/${upcoming[0].occ!.id}`}
+                      className="rounded-full bg-primary px-3 py-1 text-xs font-bold text-primary-foreground shadow-2xs hover:scale-105 transition"
+                    >
+                      Pay
+                    </Link>
+                  </div>
+                </div>
+              ) : null}
 
-          {/* Emergency Crisis Drill Teaser */}
-          <Card className="p-5 shadow-sm border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-card to-secondary/30">
-            <div className="flex items-start gap-4">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <ShieldAlert className="size-6" />
-              </span>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-sm text-foreground">
-                  {lastDrill ? `Last drill score: ${lastDrill.score}/100` : 'Money Emergency Simulation'}
-                </h3>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {lastDrill
-                    ? `Result: ${lastDrill.passed ? 'Safe reserve intact' : 'Shortage detected'} for ${lastDrill.scenarioLabel}`
-                    : 'Rehearse a sudden income loss or unexpected expense before it ever happens.'}
-                </p>
-                <Link href="/drill" className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'mt-3 font-semibold')}>
-                  Run Simulation
-                </Link>
+              {/* 2. TRANSACTION HISTORY ITEMS (Siburian style: Meta/Apple/Google Pay rows) */}
+              <div className="space-y-2 pt-1">
+                {recentTransactions.length === 0 ? (
+                  <p className="py-4 text-center text-xs text-muted-foreground">No recent transactions.</p>
+                ) : (
+                  recentTransactions.map((tx, idx) => (
+                    <div
+                      key={tx.id}
+                      className="flex items-center justify-between gap-3 p-2 rounded-xl hover:bg-muted/40 transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+                          {idx === 0 ? (
+                            <TrendingUp className="size-4 text-primary" />
+                          ) : idx === 1 ? (
+                            <CreditCard className="size-4 text-foreground" />
+                          ) : (
+                            <Coins className="size-4 text-muted-foreground" />
+                          )}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-foreground truncate">{tx.title}</p>
+                          <p className="text-[10px] text-muted-foreground">{formatDate(tx.date)}</p>
+                        </div>
+                      </div>
+
+                      <span
+                        className={cn(
+                          'font-bold text-xs tabular-nums shrink-0',
+                          idx === 0 ? 'text-success' : 'text-danger',
+                        )}
+                      >
+                        {idx === 0 ? `+${formatINR(tx.amount)}` : `-${formatINR(tx.amount)}`}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
-          </Card>
+          </div>
 
-          {/* Recent Activity */}
-          <Card className="p-5 shadow-sm border-slate-200/80 dark:border-slate-800">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-foreground">Recent Activity</h2>
-              <Link href="/notifications" className="text-xs font-semibold text-primary hover:underline">
-                View all
-              </Link>
-            </div>
-            <div className="mt-3 divide-y">
-              {recent.length === 0 ? (
-                <p className="py-4 text-center text-sm text-muted-foreground">No updates yet.</p>
-              ) : (
-                recent.map((n) => (
-                  <Link key={n.id} href={n.href ?? '/notifications'} className="flex items-start gap-3 py-3 hover:opacity-80 transition">
-                    <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', n.read ? 'bg-border' : 'bg-primary')} aria-hidden />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-foreground">{n.title}</p>
-                      <p className="line-clamp-1 text-xs text-muted-foreground">{n.body}</p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">{formatDateTime(n.at)}</p>
-                    </div>
-                  </Link>
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
+          <div className="mt-5 pt-3 border-t border-border/50 flex items-center justify-between">
+            <Link
+              href="/bills"
+              className="text-xs font-bold text-muted-foreground hover:text-foreground"
+            >
+              All Bills ({upcoming.length})
+            </Link>
+            <Link
+              href="/history"
+              className="text-xs font-bold text-primary hover:underline"
+            >
+              Full History →
+            </Link>
+          </div>
+        </Card>
       </div>
-    </>
+
+      {/* ──────────────────────────────────────────────────────────────────────────
+          OPTIONAL: MONTHLY SPENDING TREND CHART (6-Month Full-Width Bento Section)
+          ────────────────────────────────────────────────────────────────────────── */}
+      <Card className="p-6 border-border bg-card shadow-xs rounded-3xl">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+          <div>
+            <h2 className="text-base font-bold text-foreground">Monthly Spending Trend</h2>
+            <p className="text-xs text-muted-foreground">6-month day-to-day spending pattern (bills separate)</p>
+          </div>
+          <Link href="/expenses" className="text-xs font-bold text-primary hover:underline self-start sm:self-auto">
+            View expense details →
+          </Link>
+        </div>
+
+        <div>
+          {hasTrend ? (
+            <SpendingTrend points={trend} budget={everydayBudget} />
+          ) : (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Your trend chart will populate as you record day-to-day expenses.
+            </p>
+          )}
+        </div>
+      </Card>
+    </div>
   )
 }

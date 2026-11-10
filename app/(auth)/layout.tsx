@@ -9,7 +9,7 @@ export default function AuthLayout({ children }: Readonly<{ children: React.Reac
         <div className="w-full max-w-[25rem]">
           <Link href="/" className="mx-auto mb-6 flex w-fit items-center gap-2.5 group" aria-label="Tinku home">
             <span className="flex size-11 items-center justify-center rounded-2xl bg-primary text-2xl font-black text-primary-foreground shadow-sm shadow-primary/25 transition-transform group-hover:scale-105">
-              T.
+              T
             </span>
             <span className="text-xl font-bold tracking-tight">Tinku</span>
           </Link>

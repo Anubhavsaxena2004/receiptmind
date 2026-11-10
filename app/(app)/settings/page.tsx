@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { CircleCheck, CircleDashed, Database, Eraser, KeyRound, LogIn, MailWarning, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react'
+import { CircleCheck, CircleDashed, Database, Eraser, KeyRound, LogIn, MailWarning, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { ChangePasswordForm, DeleteAccountForm, ZapierConnect, ZapierConnected } from './account-forms'
 import { ProfileForm } from './profile-form'
+import { AppearanceSettings } from '@/components/appearance-settings'
 import { ActionButton } from '@/components/action-button'
 import { PageHeader } from '@/components/page-header'
 import { buttonVariants } from '@/components/ui/button'
@@ -23,6 +24,7 @@ export const metadata: Metadata = { title: 'Settings' }
 
 const TABS = [
   { id: 'profile', label: 'Profile' },
+  { id: 'appearance', label: 'Appearance' },
   { id: 'security', label: 'Security' },
   { id: 'connections', label: 'Connections' },
   { id: 'demo', label: 'Demo tools' },
@@ -110,6 +112,18 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         ) : (
           <SignUpCard title="Set your own income, balance and salary day" body="You’re viewing the sample household. Your own numbers live in your account." />
         ))}
+
+      {tab === 'appearance' && (
+        <Card className="p-6 border-border bg-card shadow-xs">
+          <CardHeader
+            title="Theme & Interface Appearance"
+            description="Customize how Tinku looks on your device. Choose between our high-contrast light theme, deep dark mode, or match your system automatically."
+          />
+          <div className="mt-4">
+            <AppearanceSettings />
+          </div>
+        </Card>
+      )}
 
       {tab === 'security' &&
         (user ? (
@@ -317,7 +331,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                     confirmLabel: 'Load sample data',
                   }}
                 >
-                  <Sparkles /> Load sample data
+                  <Database /> Load sample data
                 </ActionButton>
               </div>
               <div className="flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between">

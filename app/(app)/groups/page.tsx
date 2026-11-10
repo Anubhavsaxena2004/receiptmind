@@ -1,10 +1,10 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowRight, Plus, Users } from 'lucide-react'
-import { EmptyState } from '@/components/bits'
 import { PageHeader } from '@/components/page-header'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { EmptyState } from '@/components/tinku'
 import { getData } from '@/lib/data'
 import { formatINR } from '@/lib/format'
 import { groupBalances } from '@/lib/groups'
@@ -17,53 +17,66 @@ export default async function GroupsPage() {
   const groups = db.groups.map((g) => {
     const bal = groupBalances(g, db.groupExpenses, db.settlements)
     const you = g.members.find((m) => m.isYou)
-    return { g, mine: you ? Math.round(bal[you.id] ?? 0) : 0, count: db.groupExpenses.filter((e) => e.groupId === g.id).length }
+    return { g, mine: Math.round(you ? bal[you.id] ?? 0 : 0), count: db.groupExpenses.filter((e) => e.groupId === g.id).length }
   })
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         title="Groups"
-        description="Share costs with flatmates, family or friends. Tinku keeps track of who paid and who still owes."
+        description="Split household and travel costs with flatmates, family, or friends. Tinku maintains a transparent settlement ledger."
         action={
-          <Link href="/groups/new" className={buttonVariants({ size: 'lg' })}>
-            <Plus /> New group
+          <Link href="/groups/new" className={cn(buttonVariants({ size: 'lg', variant: 'default' }), 'gap-1.5 font-semibold shadow-sm')}>
+            <Plus className="size-4 stroke-[2.5]" /> New group
           </Link>
         }
       />
+
       {groups.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="No groups yet"
-          body="Create one for your flat, family or a trip."
-          action={
-            <Link href="/groups/new" className={buttonVariants()}>
-              <Plus /> New group
-            </Link>
-          }
+          title="No shared groups yet"
+          description="Create a group for your apartment, family groceries, or a holiday trip to split expenses and track who owes whom."
+          action={{
+            label: 'Create group',
+            href: '/groups/new',
+          }}
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2">
           {groups.map(({ g, mine, count }) => (
-            <Link key={g.id} href={`/groups/${g.id}`} className="group">
-              <Card className="h-full p-5 transition group-hover:border-primary/40 group-hover:shadow-sm">
+            <Link key={g.id} href={`/groups/${g.id}`} className="group outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-2xl">
+              <Card className="h-full p-5 border-border bg-card shadow-xs transition-all hover:border-primary/40 hover:shadow-sm">
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-lg font-semibold">{g.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {g.members.map((m) => (m.isYou ? 'You' : m.name)).join(', ')} · {count} shared expenses
+                  <div className="min-w-0 flex-1">
+                    <p className="text-base font-bold text-foreground group-hover:text-primary transition-colors truncate">
+                      {g.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                      {g.members.map((m) => (m.isYou ? 'You' : m.name)).join(', ')} · {count} expense{count === 1 ? '' : 's'}
                     </p>
                   </div>
-                  <ArrowRight className="size-4 text-muted-foreground" aria-hidden />
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground group-hover:text-foreground group-hover:bg-muted/80 transition-colors">
+                    <ArrowRight className="size-4" aria-hidden="true" />
+                  </span>
                 </div>
-                <p className={cn('mt-4 text-sm font-semibold', mine > 0 ? 'text-success' : mine < 0 ? 'text-danger' : 'text-muted-foreground')}>
-                  {mine > 0 ? `You are owed ${formatINR(mine)}` : mine < 0 ? `You owe ${formatINR(-mine)}` : 'All settled up'}
-                </p>
+
+                <div className="mt-5 pt-3 border-t border-border/60 flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Your net position:</span>
+                  <span
+                    className={cn(
+                      'text-sm font-bold tabular-nums',
+                      mine > 0 ? 'text-success' : mine < 0 ? 'text-danger' : 'text-muted-foreground',
+                    )}
+                  >
+                    {mine > 0 ? `+${formatINR(mine)} (owed to you)` : mine < 0 ? `−${formatINR(-mine)} (you owe)` : 'All settled up'}
+                  </span>
+                </div>
               </Card>
             </Link>
           ))}
         </div>
       )}
-    </>
+    </div>
   )
 }

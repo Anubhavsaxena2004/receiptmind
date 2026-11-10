@@ -1,8 +1,8 @@
 import type { Metadata } from 'next'
-import { History } from 'lucide-react'
+import { AlertCircle, CheckCircle2, History } from 'lucide-react'
 import { LedgerGrid, type LedgerRow } from './ledger-grid'
-import { EmptyState, StatTile } from '@/components/bits'
 import { PageHeader } from '@/components/page-header'
+import { EmptyState, StatCard } from '@/components/tinku'
 import { getData } from '@/lib/data'
 import { formatINR } from '@/lib/format'
 
@@ -23,23 +23,53 @@ export default async function HistoryPage() {
   }))
   const verified = db.payments.filter((p) => p.status === 'captured')
   const attention = db.payments.filter((p) => p.status === 'pending' || p.status === 'failed').length
+  const totalVerifiedAmount = verified.reduce((s, p) => s + p.amountInr, 0)
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         title="Payment history"
-        description="Every payment attempt and its verified status. Click a row for the full timeline."
+        description="Comprehensive audit ledger of all transaction attempts, payment methods, and provider verification statuses."
       />
-      <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <StatTile label="Verified payments" value={verified.length} helper={formatINR(verified.reduce((s, p) => s + p.amountInr, 0)) + ' in total'} />
-        <StatTile label="Pending or failed" value={attention} helper={attention ? 'Open them to retry or re-check' : 'Nothing needs you'} />
-        <StatTile label="All attempts" value={db.payments.length} helper="Including cancelled checkouts" />
+
+      <div className="grid gap-3 sm:gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Verified Payments"
+          value={verified.length}
+          icon={CheckCircle2}
+          iconColorClass="text-emerald-600 dark:text-emerald-400"
+          iconBgClass="bg-emerald-50 dark:bg-emerald-950/50"
+          sublabel={`Total: ${formatINR(totalVerifiedAmount)}`}
+        />
+        <StatCard
+          label="Pending or Failed"
+          value={attention}
+          icon={AlertCircle}
+          iconColorClass={attention ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'}
+          iconBgClass={attention ? 'bg-amber-50 dark:bg-amber-950/50' : 'bg-muted'}
+          sublabel={attention ? 'Review required' : 'All clear'}
+        />
+        <StatCard
+          label="Total Attempts"
+          value={db.payments.length}
+          icon={History}
+          iconColorClass="text-sky-600 dark:text-sky-400"
+          iconBgClass="bg-sky-50 dark:bg-sky-950/50"
+          sublabel="Including cancelled"
+        />
       </div>
+
       {rows.length === 0 ? (
-        <EmptyState icon={History} title="No payments yet" body="When you pay a bill through Tinku, it shows up here with its status." />
+        <EmptyState
+          icon={History}
+          title="No payment records yet"
+          description="When you initiate or schedule bill payments through Tinku or PayPal Sandbox, completed and pending transactions will be recorded here."
+        />
       ) : (
-        <LedgerGrid rows={rows} />
+        <div className="rounded-2xl border border-border bg-card p-1 shadow-sm overflow-hidden">
+          <LedgerGrid rows={rows} />
+        </div>
       )}
-    </>
+    </div>
   )
 }

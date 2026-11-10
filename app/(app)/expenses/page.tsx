@@ -2,12 +2,13 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight, Plus, ReceiptText, ScanLine, Search, Trash2, X } from 'lucide-react'
 import { ActionButton } from '@/components/action-button'
-import { EmptyState, Notice } from '@/components/bits'
+import { Notice } from '@/components/bits'
 import { PageHeader } from '@/components/page-header'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input, Select } from '@/components/ui/input'
+import { EmptyState } from '@/components/tinku'
 import { deleteExpense } from '@/lib/actions/expenses'
 import { CATEGORIES, category, isCategoryId } from '@/lib/categories'
 import { getData } from '@/lib/data'
@@ -46,53 +47,58 @@ export default async function ExpensesPage({
   const days = [...new Set(list.map((e) => e.date))]
 
   return (
-    <>
+    <div className="space-y-6">
       <PageHeader
         title="Expenses"
         description="Everything you’ve spent. Add one by hand or scan a receipt — Tinku files it under the right budget."
         action={
-          <Link href="/expenses/new" className={buttonVariants({ size: 'lg' })}>
-            <Plus /> Add expense
+          <Link href="/expenses/new" className={cn(buttonVariants({ size: 'lg', variant: 'default' }), 'font-semibold gap-1.5 shadow-sm')}>
+            <Plus className="size-4 stroke-[2.5]" /> Add expense
           </Link>
         }
       />
 
-      {sp.added && <Notice tone="success" className="mb-5">Expense saved.</Notice>}
+      {sp.added && <Notice tone="success">Expense saved successfully.</Notice>}
 
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1">
-          <Link
-            href={keep({ month: shiftMonthKey(month, -1) })}
-            aria-label="Previous month"
-            className={buttonVariants({ variant: 'outline', size: 'icon-lg' })}
-          >
-            <ChevronLeft />
-          </Link>
-          <span className="min-w-36 text-center font-semibold">{formatMonth(month)}</span>
-          {month < current ? (
-            <Link href={keep({ month: shiftMonthKey(month, 1) })} aria-label="Next month" className={buttonVariants({ variant: 'outline', size: 'icon-lg' })}>
-              <ChevronRight />
+      {/* Month Navigator & Total */}
+      <Card className="p-4 shadow-sm border-border bg-card">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-1.5">
+            <Link
+              href={keep({ month: shiftMonthKey(month, -1) })}
+              aria-label="Previous month"
+              className={buttonVariants({ variant: 'outline', size: 'icon' })}
+            >
+              <ChevronLeft className="size-4" />
             </Link>
-          ) : (
-            <span className="size-9" />
-          )}
+            <span className="min-w-36 text-center text-sm font-bold text-foreground">{formatMonth(month)}</span>
+            {month < current ? (
+              <Link href={keep({ month: shiftMonthKey(month, 1) })} aria-label="Next month" className={buttonVariants({ variant: 'outline', size: 'icon' })}>
+                <ChevronRight className="size-4" />
+              </Link>
+            ) : (
+              <span className="size-10" />
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {filtered ? 'Filtered total:' : 'Total spent:'}{' '}
+            <span className="text-xl font-bold tracking-tight text-foreground tabular-nums">{formatINR(total)}</span> · {list.length} expense
+            {list.length === 1 ? '' : 's'}
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          {filtered ? 'Matching' : 'Total'} <span className="text-lg font-bold text-foreground">{formatINR(total)}</span> · {list.length} expense
-          {list.length === 1 ? '' : 's'}
-        </p>
-      </div>
+      </Card>
 
-      <form method="get" action="/expenses" role="search" className="mb-5 flex flex-col gap-2 sm:flex-row">
+      {/* Filter / Search Form */}
+      <form method="get" action="/expenses" role="search" className="flex flex-col gap-2 sm:flex-row">
         <input type="hidden" name="month" value={month} />
         <label className="relative flex-1">
           <span className="sr-only">Search expenses</span>
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-          <Input name="q" defaultValue={q} placeholder="Search by name or note" className="pl-9" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Input name="q" defaultValue={q} placeholder="Search by description or note" className="pl-9 h-11" />
         </label>
-        <label className="sm:w-52">
+        <label className="sm:w-56">
           <span className="sr-only">Category</span>
-          <Select name="cat" defaultValue={cat}>
+          <Select name="cat" defaultValue={cat} className="h-11">
             <option value="">All categories</option>
             {CATEGORIES.map((c) => (
               <option key={c.id} value={c.id}>
@@ -102,78 +108,101 @@ export default async function ExpensesPage({
           </Select>
         </label>
         <div className="flex gap-2">
-          <button type="submit" className={buttonVariants({ variant: 'outline', size: 'lg' })}>
+          <button type="submit" className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'h-11 font-semibold')}>
             Filter
           </button>
           {filtered && (
-            <Link href={`/expenses?month=${month}`} className={buttonVariants({ variant: 'ghost', size: 'lg' })}>
-              <X /> Clear
+            <Link href={`/expenses?month=${month}`} className={cn(buttonVariants({ variant: 'ghost', size: 'lg' }), 'h-11 font-semibold')}>
+              <X className="size-4" /> Clear
             </Link>
           )}
         </div>
       </form>
 
+      {/* Category Quick Chips */}
       {top.length > 0 && (
-        <div className="mb-6 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           {top.map(([c, amt]) => (
             <Link
               key={c}
               href={keep({ month, cat: c === cat ? '' : c })}
               aria-current={c === cat ? 'true' : undefined}
-              className={cn('rounded-full border px-3 py-1.5 text-sm transition hover:border-primary/40', c === cat ? 'border-primary bg-secondary' : 'bg-card')}
+              className={cn(
+                'rounded-full border px-3 py-1.5 text-xs font-semibold transition-all',
+                c === cat
+                  ? 'border-primary bg-secondary text-secondary-foreground shadow-2xs'
+                  : 'border-border bg-card text-foreground hover:border-primary/40',
+              )}
             >
-              {category(c as never).label} <span className="font-semibold">{formatINR(amt)}</span>
+              {category(c as never).label} <span className="tabular-nums font-bold text-foreground ml-1">{formatINR(amt)}</span>
             </Link>
           ))}
         </div>
       )}
 
+      {/* Expense List or Empty State */}
       {list.length === 0 ? (
         <EmptyState
           icon={filtered ? Search : ReceiptText}
-          title={filtered ? 'No expenses match' : 'No expenses this month'}
-          body={filtered ? 'Try another search or category, or clear the filters.' : 'Add your first one — it takes ten seconds, or snap a receipt and let Tinku read it.'}
-          action={
-            <Link href="/expenses/new" className={buttonVariants()}>
-              <Plus /> Add expense
-            </Link>
+          title={filtered ? 'No expenses match your filters' : 'No expenses recorded this month'}
+          description={
+            filtered
+              ? 'Try modifying your search keywords or clear the category filter.'
+              : 'Add your first expense or snap a photo of a receipt to automatically parse items.'
           }
+          action={{
+            label: 'Add expense',
+            href: '/expenses/new',
+          }}
         />
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-6">
           {days.map((day) => {
             const items = list.filter((e) => e.date === day)
+            const dayTotal = items.reduce((s, i) => s + i.amount, 0)
             return (
-              <section key={day}>
-                <h2 className="mb-2 text-sm font-semibold text-muted-foreground">
-                  {day === today ? 'Today' : formatDateLong(day)}
-                </h2>
-                <Card className="divide-y">
+              <section key={day} className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    {day === today ? 'Today' : formatDateLong(day)}
+                  </h2>
+                  <span className="text-xs font-semibold text-muted-foreground tabular-nums">
+                    {formatINR(dayTotal)}
+                  </span>
+                </div>
+                <Card className="divide-y divide-border border-border bg-card shadow-xs overflow-hidden">
                   {items.map((e) => (
-                    <div key={e.id} className="flex items-center gap-3 p-4">
+                    <div key={e.id} className="flex items-center gap-3 p-4 transition-colors hover:bg-muted/30">
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">{e.title}</p>
-                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+                        <p className="truncate font-semibold text-sm text-foreground">{e.title}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                           <span>{category(e.category).label}</span>
                           {e.source === 'receipt' && (
                             <Badge icon={ScanLine} tone="primary">
-                              Scanned receipt
+                              Scanned
                             </Badge>
                           )}
-                          {e.source === 'bill' && <Badge tone="neutral">Bill payment</Badge>}
+                          {e.source === 'bill' && <Badge tone="neutral">Bill</Badge>}
+                          {e.note && <span className="truncate italic">· {e.note}</span>}
                         </div>
                       </div>
-                      <span className={cn('font-semibold whitespace-nowrap')}>{formatINR(e.amount)}</span>
+                      <span className="font-bold text-sm tabular-nums text-foreground whitespace-nowrap">
+                        −{formatINR(e.amount)}
+                      </span>
                       {e.source !== 'bill' ? (
                         <ActionButton
                           action={deleteExpense}
                           fields={{ id: e.id }}
                           variant="ghost"
                           size="sm"
-                          confirm={{ title: `Delete “${e.title}”?`, body: `${formatINR(e.amount)} goes back to your money available.`, confirmLabel: 'Delete' }}
-                          className="text-muted-foreground"
+                          confirm={{
+                            title: `Delete “${e.title}”?`,
+                            body: `${formatINR(e.amount)} will be restored to your available balance.`,
+                            confirmLabel: 'Delete expense',
+                          }}
+                          className="text-muted-foreground hover:text-danger size-8 p-0"
                         >
-                          <Trash2 />
+                          <Trash2 className="size-4" />
                           <span className="sr-only">Delete {e.title}</span>
                         </ActionButton>
                       ) : (
@@ -187,6 +216,6 @@ export default async function ExpensesPage({
           })}
         </div>
       )}
-    </>
+    </div>
   )
 }
