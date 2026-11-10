@@ -1,14 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { apiCaller, crossSiteBlock } from '@/lib/api'
 import { CATEGORY_IDS } from '@/lib/categories'
 
-/**
- * Receipt scanning with Claude (vision + structured output).
- * The result is only a suggestion: the form shows it for the user to check before saving.
- */
 const ReceiptSchema = z.object({
   is_receipt: z.boolean().describe('False if the image is not a bill or receipt'),
   merchant: z.string().describe('Shop or company name, short'),
@@ -20,6 +15,8 @@ const ReceiptSchema = z.object({
   note: z.string().describe('One short line about anything unclear, or empty string'),
 })
 
+export type ReceiptData = z.infer<typeof ReceiptSchema>
+
 const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const
 type ImageType = (typeof IMAGE_TYPES)[number]
 const MAX_BYTES = 5 * 1024 * 1024
@@ -30,6 +27,27 @@ const PROMPT = `Read this receipt or bill and extract the purchase.
 - If a value is not visible, use an empty string (or 0 for the amount) and lower the confidence.
 - If the image is not a receipt or bill, set is_receipt to false.`
 
+const TOOLS: Anthropic.Tool[] = [
+  {
+    name: 'extract_receipt',
+    description: 'Extract purchase details from the receipt or bill',
+    input_schema: {
+      type: 'object',
+      properties: {
+        is_receipt: { type: 'boolean', description: 'False if the image is not a bill or receipt' },
+        merchant: { type: 'string', description: 'Shop or company name, short' },
+        total_amount: { type: 'number', description: 'Final total paid, in the receipt currency, as a plain number' },
+        currency: { type: 'string', description: 'ISO currency code, e.g. INR, USD' },
+        date: { type: 'string', description: 'Purchase date as YYYY-MM-DD, or empty string if not visible' },
+        category: { type: 'string', enum: CATEGORY_IDS, description: 'Matching budget category' },
+        confidence: { type: 'string', enum: ['high', 'medium', 'low'], description: 'Confidence level' },
+        note: { type: 'string', description: 'One short line about anything unclear, or empty string' },
+      },
+      required: ['is_receipt', 'merchant', 'total_amount', 'currency', 'date', 'category', 'confidence', 'note'],
+    },
+  },
+]
+
 let client: Anthropic | null = null
 
 export async function POST(request: Request) {
@@ -38,6 +56,7 @@ export async function POST(request: Request) {
   if (!caller) return NextResponse.json({ error: 'Log in to scan receipts.', needsAuth: 'login' }, { status: 401 })
   const blocked = crossSiteBlock(request, caller)
   if (blocked) return blocked
+
   let file: File | null
   try {
     file = (await request.formData()).get('file') as File | null
@@ -53,43 +72,61 @@ export async function POST(request: Request) {
   }
 
   const data = Buffer.from(await file.arrayBuffer()).toString('base64')
-  const source: Anthropic.Beta.BetaContentBlockParam = isPdf
-    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } }
+  const source: Anthropic.Messages.ContentBlockParam = isPdf
+    ? ({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } } as unknown as Anthropic.Messages.ContentBlockParam)
     : { type: 'image', source: { type: 'base64', media_type: file.type as ImageType, data } }
 
-  try {
-    client ??= new Anthropic()
-    const response = await client.beta.messages.parse({
-      model: 'claude-opus-5-5',
-      max_tokens: 16000,
-      // Server-side fallback: if a request is declined, the API retries it on a fallback model.
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
-      output_config: { effort: 'low', format: betaZodOutputFormat(ReceiptSchema) },
-      messages: [{ role: 'user', content: [source, { type: 'text', text: PROMPT }] }],
-    })
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
+  if (!apiKey) {
+    return NextResponse.json({ error: 'Receipt scanning isn’t set up (add ANTHROPIC_API_KEY in .env). Enter the details by hand.' }, { status: 503 })
+  }
 
-    if (response.stop_reason === 'refusal') {
-      return NextResponse.json({ error: 'This file could not be read. Enter the details by hand.' }, { status: 422 })
+  try {
+    client ??= new Anthropic({ apiKey })
+    const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest'
+
+    const response = await client.messages.create(
+      {
+        model,
+        max_tokens: 1024,
+        tools: TOOLS,
+        tool_choice: { type: 'tool', name: 'extract_receipt' },
+        messages: [{ role: 'user', content: [source, { type: 'text', text: PROMPT }] }],
+      },
+      isPdf ? { headers: { 'anthropic-beta': 'pdfs-2024-09-25' } } : undefined,
+    )
+
+    const toolBlock = response.content.find(
+      (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'extract_receipt',
+    )
+    if (!toolBlock || typeof toolBlock.input !== 'object' || !toolBlock.input) {
+      return NextResponse.json({ error: 'Could not read the receipt. Enter the details by hand.' }, { status: 422 })
     }
-    const parsed = response.parsed_output
-    if (!parsed) return NextResponse.json({ error: 'Could not read the receipt. Enter the details by hand.' }, { status: 422 })
-    if (!parsed.is_receipt) return NextResponse.json({ error: 'That doesn’t look like a receipt or bill.' }, { status: 422 })
-    return NextResponse.json({ receipt: parsed })
+
+    const parsed = ReceiptSchema.safeParse(toolBlock.input)
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Could not read the receipt details. Enter the details by hand.' }, { status: 422 })
+    }
+
+    if (!parsed.data.is_receipt) {
+      return NextResponse.json({ error: 'That doesn’t look like a receipt or bill.' }, { status: 422 })
+    }
+
+    return NextResponse.json({ receipt: parsed.data })
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) {
-      return NextResponse.json({ error: 'Receipt scanning isn’t set up (add ANTHROPIC_API_KEY). Enter the details by hand.' }, { status: 503 })
+      return NextResponse.json({ error: 'Anthropic API key is invalid or expired. Check ANTHROPIC_API_KEY.' }, { status: 503 })
     }
     if (err instanceof Anthropic.RateLimitError) {
-      return NextResponse.json({ error: 'Too many scans right now. Try again in a minute.' }, { status: 429 })
+      return NextResponse.json({ error: 'Too many scans right now or Anthropic credit limit reached. Try again in a minute.' }, { status: 429 })
     }
     if (err instanceof Anthropic.APIError) {
-      console.error('[receipts] API error', err.status, err.message)
-      return NextResponse.json({ error: 'The scanner had a problem. Enter the details by hand.' }, { status: 502 })
+      console.error('[receipts] Anthropic API error', err.status, err.message)
+      return NextResponse.json({ error: `Scanner error (${err.message}). Enter details by hand.` }, { status: 502 })
     }
     console.error('[receipts]', err)
     const message = err instanceof Error && /api key|auth/i.test(err.message)
-      ? 'Receipt scanning isn’t set up (add ANTHROPIC_API_KEY). Enter the details by hand.'
+      ? 'Receipt scanning isn’t set up (add ANTHROPIC_API_KEY in .env). Enter the details by hand.'
       : 'Could not scan the receipt. Enter the details by hand.'
     return NextResponse.json({ error: message }, { status: 503 })
   }

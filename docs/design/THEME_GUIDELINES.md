@@ -159,21 +159,22 @@ Complete token mapping across all three modes:
 
 | Token | Light | Dark | System Dark |
 |---|---|---|---|
-| `--background` | `#F8F8F8` | `#0F0F0F` | `#0F0F0F` |
-| `--foreground` | `#0F0F0F` | `#F5F5F5` | `#F5F5F5` |
-| `--card` | `#FFFFFF` | `#202020` | `#202020` |
-| `--card-foreground` | `#0F0F0F` | `#F5F5F5` | `#F5F5F5` |
-| `--primary` | `#5DD62C` | `#5DD62C` | `#5DD62C` |
-| `--primary-foreground` | `#0F0F0F` | `#0F0F0F` | `#0F0F0F` |
-| `--secondary` | `#ECFCE5` | `#1A2F12` | `#1A2F12` |
-| `--muted` | `#F1F5F1` | `#1C1C1C` | `#1C1C1C` |
-| `--muted-foreground` | `#6B7280` | `#9CA3AF` | `#9CA3AF` |
-| `--border` | `#E5E7E0` | `#2E2E2E` | `#2E2E2E` |
-| `--ring` | `#5DD62C` | `#5DD62C` | `#5DD62C` |
+| `--background` | `#FEFEFD` | `#181817` | `#181817` |
+| `--surface` | `#F7F7F5` | `#272727` | `#272727` |
+| `--card` | `#FFFFFF` | `#343333` | `#343333` |
+| `--card-foreground` | `#0E0D0D` | `#FBFBFB` | `#FBFBFB` |
+| `--primary` | `#FB7507` | `#F25A0C` | `#F25A0C` |
+| `--primary-foreground` | `#FFFFFF` | `#FFFFFF` | `#FFFFFF` |
+| `--secondary` | `#FFF5ED` | `#30241E` | `#30241E` |
+| `--secondary-foreground` | `#D97C2F` | `#F7854A` | `#F7854A` |
+| `--muted` | `#F7F7F5` | `#272727` | `#272727` |
+| `--muted-foreground` | `#615A56` | `#999A9A` | `#999A9A` |
+| `--border` | `#DCD7D3` | `#52514F` | `#52514F` |
+| `--ring` | `#FB7507` | `#F25A0C` | `#F25A0C` |
 | `--success` | `#16A34A` | `#4ADE80` | `#4ADE80` |
 | `--warning` | `#D97706` | `#FBBF24` | `#FBBF24` |
 | `--danger` | `#DC2626` | `#F87171` | `#F87171` |
-| `--sidebar` | `#FFFFFF` | `#161616` | `#161616` |
+| `--sidebar` | `#F7F7F5` | `#1F1F1E` | `#1F1F1E` |
 
 ---
 
@@ -183,15 +184,15 @@ When implementing any component, verify these in dark mode:
 
 | Check | How to verify |
 |---|---|
-| Background visible from parent | Card `#202020` on `#0F0F0F` background — slight separation |
+| Background visible from parent | Card `#343333` on `#181817` background — distinct separation |
 | Text readable | Minimum 4.5:1 contrast ratio |
-| Borders visible | `border-border` (`#2E2E2E`) visible against `#202020` card |
-| Primary accent visible | `#5DD62C` on `#0F0F0F` — high contrast (7.2:1) |
+| Borders visible | `border-border` (`#52514F`) visible against `#343333` card |
+| Primary accent visible | `#F25A0C` on `#181817` — high contrast |
 | Status colors correct | Success=green, Warning=amber, Danger=red in dark |
 | Shadows | In dark mode, reduce or remove shadows; rely on borders instead |
 | Images/icons | Ensure icons are `text-current` or `text-muted-foreground` |
 | Input fields | `bg-background border-input` — input bg slightly different from card |
-| Focus rings | `ring-ring` (`#5DD62C`) visible on dark bg |
+| Focus rings | `ring-ring` (`#F25A0C`) visible on dark bg |
 
 ---
 
