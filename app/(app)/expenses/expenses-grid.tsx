@@ -23,3 +23,4 @@ const Grid = dynamic(() => import('./expenses-grid-inner'), {
 export function ExpensesGrid({ rows }: { rows: ExpenseRow[] }) {
   return <Grid rows={rows} />
 }
+

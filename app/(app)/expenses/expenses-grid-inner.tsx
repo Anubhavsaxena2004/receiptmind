@@ -175,3 +175,4 @@ export default function ExpensesGridInner({ rows }: { rows: ExpenseRow[] }) {
     </div>
   )
 }
+
