@@ -1,0 +1,328 @@
+{
+  "info": {
+    "_postman_id": "a98457f0-25e2-4113-9769-cf7782ad76a1",
+    "name": "Tinku - Expense & PayPal Payment API",
+    "description": "Postman collection for testing Tinku Next.js API routes (Daily Scheduler, PayPal Webhooks, Return/Cancel handlers) and direct PayPal Sandbox v2 REST APIs.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Tinku Internal API",
+      "item": [
+        {
+          "name": "Scheduler - Run Daily Checks & AutoPay",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{CRON_SECRET}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{APP_URL}}/api/scheduler/run",
+              "host": ["{{APP_URL}}"],
+              "path": ["api", "scheduler", "run"]
+            },
+            "description": "Trigger daily bill due checks, reminder notifications, and AutoPay rules. Requires CRON_SECRET."
+          },
+          "response": []
+        },
+        {
+          "name": "PayPal - Return Handler (Capture & Verify)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{APP_URL}}/api/paypal/return?payment={{PAYMENT_ID}}&token={{PAYPAL_ORDER_ID}}",
+              "host": ["{{APP_URL}}"],
+              "path": ["api", "paypal", "return"],
+              "query": [
+                {
+                  "key": "payment",
+                  "value": "{{PAYMENT_ID}}",
+                  "description": "Tinku internal payment ID (e.g. pay_xxx)"
+                },
+                {
+                  "key": "token",
+                  "value": "{{PAYPAL_ORDER_ID}}",
+                  "description": "PayPal Order ID"
+                }
+              ]
+            },
+            "description": "Simulates browser return callback from PayPal approval. Server captures and verifies order."
+          },
+          "response": []
+        },
+        {
+          "name": "PayPal - Cancel Handler",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{APP_URL}}/api/paypal/cancel?payment={{PAYMENT_ID}}",
+              "host": ["{{APP_URL}}"],
+              "path": ["api", "paypal", "cancel"],
+              "query": [
+                {
+                  "key": "payment",
+                  "value": "{{PAYMENT_ID}}",
+                  "description": "Tinku internal payment ID"
+                }
+              ]
+            },
+            "description": "Simulates buyer cancellation return callback. Marks checkout cancelled without charging."
+          },
+          "response": []
+        },
+        {
+          "name": "PayPal Webhook - PAYMENT.CAPTURE.COMPLETED",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "paypal-auth-algo",
+                "value": "SHA256withRSA"
+              },
+              {
+                "key": "paypal-cert-url",
+                "value": "https://api.sandbox.paypal.com/v1/notifications/certs/CERT-..."
+              },
+              {
+                "key": "paypal-transmission-id",
+                "value": "mock-trans-id-001"
+              },
+              {
+                "key": "paypal-transmission-sig",
+                "value": "mock-signature"
+              },
+              {
+                "key": "paypal-transmission-time",
+                "value": "2026-11-10T12:00:00Z"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"WH-EVT-001\",\n  \"event_version\": \"1.0\",\n  \"create_time\": \"2026-11-10T12:00:00Z\",\n  \"event_type\": \"PAYMENT.CAPTURE.COMPLETED\",\n  \"summary\": \"Payment completed for order\",\n  \"resource_type\": \"capture\",\n  \"resource\": {\n    \"id\": \"CAP-001\",\n    \"status\": \"COMPLETED\",\n    \"custom_id\": \"{{PAYMENT_ID}}\",\n    \"amount\": {\n      \"currency_code\": \"USD\",\n      \"value\": \"10.00\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{APP_URL}}/api/webhooks/paypal",
+              "host": ["{{APP_URL}}"],
+              "path": ["api", "webhooks", "paypal"]
+            },
+            "description": "Postman mock payload for PayPal PAYMENT.CAPTURE.COMPLETED webhook event."
+          },
+          "response": []
+        },
+        {
+          "name": "Receipts - Extract with Claude Vision",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{APP_URL}}/api/receipts/extract",
+              "host": ["{{APP_URL}}"],
+              "path": ["api", "receipts", "extract"]
+            },
+            "description": "Upload a receipt photo (JPG, PNG, WEBP, PDF under 5MB) to extract metadata with Claude AI."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. PayPal Sandbox REST API v2",
+      "item": [
+        {
+          "name": "OAuth - Get Access Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.access_token) {",
+                  "    pm.environment.set(\"PAYPAL_ACCESS_TOKEN\", jsonData.access_token);",
+                  "    console.log(\"Saved PAYPAL_ACCESS_TOKEN to environment\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{PAYPAL_CLIENT_ID}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{PAYPAL_CLIENT_SECRET}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{PAYPAL_API_BASE}}/v1/oauth2/token",
+              "host": ["{{PAYPAL_API_BASE}}"],
+              "path": ["v1", "oauth2", "token"]
+            },
+            "description": "Exchange Sandbox Client ID & Secret for an OAuth 2.0 Bearer access token. Tests script saves token into environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Orders - Create Order (intent=CAPTURE)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.environment.set(\"PAYPAL_ORDER_ID\", jsonData.id);",
+                  "    console.log(\"Saved PAYPAL_ORDER_ID: \" + jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{PAYPAL_ACCESS_TOKEN}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}",
+                "description": "Idempotency key"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"intent\": \"CAPTURE\",\n  \"purchase_units\": [\n    {\n      \"custom_id\": \"{{PAYMENT_ID}}\",\n      \"description\": \"Tinku Test Bill\",\n      \"amount\": {\n        \"currency_code\": \"USD\",\n        \"value\": \"10.00\"\n      }\n    }\n  ],\n  \"payment_source\": {\n    \"paypal\": {\n      \"experience_context\": {\n        \"brand_name\": \"Tinku demo\",\n        \"user_action\": \"PAY_NOW\",\n        \"shipping_preference\": \"NO_SHIPPING\",\n        \"return_url\": \"{{APP_URL}}/api/paypal/return?payment={{PAYMENT_ID}}\",\n        \"cancel_url\": \"{{APP_URL}}/api/paypal/cancel?payment={{PAYMENT_ID}}\"\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{PAYPAL_API_BASE}}/v2/checkout/orders",
+              "host": ["{{PAYPAL_API_BASE}}"],
+              "path": ["v2", "checkout", "orders"]
+            },
+            "description": "Direct PayPal Sandbox Orders API call to create an order. Returns approval URL and saves PAYPAL_ORDER_ID into environment."
+          },
+          "response": []
+        },
+        {
+          "name": "Orders - Get Order Details",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{PAYPAL_ACCESS_TOKEN}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{PAYPAL_API_BASE}}/v2/checkout/orders/{{PAYPAL_ORDER_ID}}",
+              "host": ["{{PAYPAL_API_BASE}}"],
+              "path": ["v2", "checkout", "orders", "{{PAYPAL_ORDER_ID}}"]
+            },
+            "description": "Inspect status of an existing PayPal Order (e.g. CREATED, APPROVED, COMPLETED)."
+          },
+          "response": []
+        },
+        {
+          "name": "Orders - Capture Approved Order",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{PAYPAL_ACCESS_TOKEN}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "PayPal-Request-Id",
+                "value": "{{$guid}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{PAYPAL_API_BASE}}/v2/checkout/orders/{{PAYPAL_ORDER_ID}}/capture",
+              "host": ["{{PAYPAL_API_BASE}}"],
+              "path": ["v2", "checkout", "orders", "{{PAYPAL_ORDER_ID}}", "capture"]
+            },
+            "description": "Directly captures an approved PayPal order on the sandbox API."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
+
