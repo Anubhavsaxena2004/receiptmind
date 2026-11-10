@@ -7,8 +7,10 @@ export default function AuthLayout({ children }: Readonly<{ children: React.Reac
     <div className="flex min-h-dvh flex-col bg-[radial-gradient(ellipse_at_top,var(--secondary),transparent_60%)]">
       <main className="flex flex-1 items-start justify-center px-4 pt-10 pb-12 sm:items-center sm:pt-12">
         <div className="w-full max-w-[25rem]">
-          <Link href="/" className="mx-auto mb-6 flex w-fit items-center gap-2.5" aria-label="Tinku home">
-            <span className="flex size-10 items-center justify-center rounded-xl bg-primary text-xl font-black text-primary-foreground">T</span>
+          <Link href="/" className="mx-auto mb-6 flex w-fit items-center gap-2.5 group" aria-label="Tinku home">
+            <span className="flex size-11 items-center justify-center rounded-2xl bg-primary text-2xl font-black text-primary-foreground shadow-sm shadow-primary/25 transition-transform group-hover:scale-105">
+              T.
+            </span>
             <span className="text-xl font-bold tracking-tight">Tinku</span>
           </Link>
           <div className="rounded-3xl border bg-card p-6 shadow-sm sm:p-8">{children}</div>

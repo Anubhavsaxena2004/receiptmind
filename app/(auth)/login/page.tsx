@@ -12,14 +12,16 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (await currentUser()) redirect(next)
   return (
     <>
-      <h1 className="text-center text-2xl font-bold tracking-tight">Welcome back</h1>
-      <p className="mt-1 text-center text-sm text-muted-foreground">Log in to see your bills, budgets and payments.</p>
+      <div className="text-center mb-6">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Log in to your account</h1>
+        <p className="mt-1.5 text-sm text-muted-foreground">Let’s continue managing your money wisely.</p>
+      </div>
       {sp.error === 'google' && (
-        <p role="alert" className="mt-4 rounded-xl bg-danger-soft px-3 py-2 text-sm font-medium text-danger">
+        <p role="alert" className="mb-4 rounded-xl bg-danger-soft px-3 py-2 text-sm font-medium text-danger">
           Google sign-in didn’t finish. Try again, or log in with your email.
         </p>
       )}
-      <div className="mt-6">
+      <div>
         <LoginForm next={next} google={googleConfigured()} />
       </div>
     </>

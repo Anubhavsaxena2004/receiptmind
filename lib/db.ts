@@ -112,9 +112,10 @@ let store: Store | null = null
 
 function getStore(): Store {
   if (store) return store
+  const clean = (s?: string) => s?.trim().replace(/^["']|["']$/g, '') || undefined
   // `||` (not `??`) so blank values copied from .env.example don't hide Vercel's KV_* vars.
-  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN
+  const url = clean(process.env.UPSTASH_REDIS_REST_URL) || clean(process.env.KV_REST_API_URL)
+  const token = clean(process.env.UPSTASH_REDIS_REST_TOKEN) || clean(process.env.KV_REST_API_TOKEN)
   if (url && token) {
     store = redisStore(url, token)
   } else if (process.env.TINKU_DATA_DIR) {

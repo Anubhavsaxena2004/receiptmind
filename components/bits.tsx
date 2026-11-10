@@ -72,9 +72,9 @@ export function Meter({ value, max, label }: { value: number; max: number; label
       aria-valuemin={0}
       aria-valuemax={max}
       aria-valuenow={Math.round(value)}
-      className={cn('h-2 w-full overflow-hidden rounded-full', track)}
+      className={cn('h-2.5 w-full overflow-hidden rounded-full', track)}
     >
-      <div className={cn('h-full rounded-full transition-all', fill)} style={{ width: `${Math.min(100, pct * 100)}%` }} />
+      <div className={cn('h-full rounded-full transition-all duration-500 ease-out', fill)} style={{ width: `${Math.min(100, pct * 100)}%` }} />
     </div>
   )
 }

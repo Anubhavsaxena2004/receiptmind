@@ -15,6 +15,7 @@ import {
   MailWarning,
   Menu,
   PiggyBank,
+  Plus,
   ReceiptText,
   Repeat,
   Settings,
@@ -110,11 +111,13 @@ function NavList({ pathname, onNavigate }: { pathname: string; onNavigate?: () =
 
 export function Brand() {
   return (
-    <Link href="/" className="flex items-center gap-2.5">
-      <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-lg font-black text-primary-foreground">T</span>
+    <Link href="/" className="flex items-center gap-2.5 group">
+      <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-lg font-black text-primary-foreground shadow-sm shadow-primary/30 transition-transform group-hover:scale-105">
+        T.
+      </span>
       <span>
         <span className="block text-[17px] leading-tight font-bold tracking-tight">Tinku</span>
-        <span className="block text-[11px] leading-tight text-muted-foreground">Expenses & bill payments</span>
+        <span className="block text-[11px] leading-tight text-muted-foreground font-medium">Smart Finance</span>
       </span>
     </Link>
   )
@@ -240,7 +243,15 @@ export function AppShell({
         <div className="px-2">
           <Brand />
         </div>
-        <div className="mt-7 flex-1 overflow-y-auto">
+        <div className="px-1 pt-5">
+          <Link
+            href="/expenses/new"
+            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/25 transition hover:bg-primary/90 active:scale-[0.99]"
+          >
+            <Plus className="size-4 stroke-[2.5]" /> Quick Add
+          </Link>
+        </div>
+        <div className="mt-5 flex-1 overflow-y-auto">
           <NavList pathname={pathname} />
         </div>
         <div className="border-t pt-3">{settingsLink()}</div>
@@ -340,6 +351,15 @@ export function AppShell({
         )}
         <main className="mx-auto max-w-5xl px-4 pt-6 pb-28 sm:px-8 sm:pt-8 lg:pb-10">{children}</main>
       </div>
+
+      {/* Floating Action Button on mobile (Mint style) */}
+      <Link
+        href="/expenses/new"
+        aria-label="Add expense"
+        className="fixed right-4 bottom-20 z-40 flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/35 transition-transform active:scale-95 lg:hidden"
+      >
+        <Plus className="size-6 stroke-[2.5]" />
+      </Link>
 
       {/* Mobile bottom navigation */}
       <nav

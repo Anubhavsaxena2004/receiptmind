@@ -12,9 +12,9 @@ import { FormError, PasswordInput, SubmitButton } from './forms'
 /** Mail icon with a status dot, as on the reference screens. */
 export function MailBadge() {
   return (
-    <div className="relative mx-auto flex size-16 items-center justify-center rounded-2xl border bg-card shadow-sm">
-      <MailCheck className="size-8 text-primary" aria-hidden />
-      <span className="absolute -top-1.5 -right-1.5 size-4 rounded-full border-2 border-card bg-primary" aria-hidden />
+    <div className="relative mx-auto flex size-20 items-center justify-center rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-card shadow-sm mb-2">
+      <MailCheck className="size-9 text-primary" aria-hidden />
+      <span className="absolute -top-1 -right-1 size-4 rounded-full border-2 border-card bg-primary animate-pulse" aria-hidden />
     </div>
   )
 }
@@ -35,9 +35,9 @@ function CodeInput({ length = 6 }: { length?: number }) {
   }
   return (
     <fieldset>
-      <legend className="mb-2 text-sm font-medium">Confirmation code</legend>
+      <legend className="sr-only">Confirmation code</legend>
       <input type="hidden" name="code" value={digits.join('')} />
-      <div className="flex justify-between gap-2">
+      <div className="flex justify-between gap-2 sm:gap-2.5 my-2">
         {digits.map((d, i) => (
           <input
             key={i}
@@ -65,7 +65,7 @@ function CodeInput({ length = 6 }: { length?: number }) {
               fill(i, e.clipboardData.getData('text'))
             }}
             onFocus={(e) => e.target.select()}
-            className="h-14 w-full min-w-0 rounded-xl border border-input bg-card text-center text-2xl font-bold tabular-nums outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/25"
+            className="h-14 sm:h-16 w-full min-w-0 rounded-2xl border-2 border-slate-200 dark:border-slate-800 bg-card text-center text-2xl font-bold tabular-nums outline-none transition-all focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/20 shadow-2xs"
           />
         ))}
       </div>
@@ -139,10 +139,7 @@ export function ResetForm({ token }: { token: string }) {
         <PasswordInput id={`${id}-confirm`} name="confirmPassword" autoComplete="new-password" />
       </Field>
       <FormError state={state} />
-      <Button type="submit" size="lg" disabled={pending} className="w-full">
-        {pending && <LoaderCircle className="animate-spin" aria-hidden />}
-        Set new password
-      </Button>
+      <SubmitButton pending={pending}>Set new password</SubmitButton>
     </form>
   )
 }

@@ -1,22 +1,25 @@
 import Link from 'next/link'
 import {
+  AlertCircle,
   ArrowRight,
   CalendarClock,
   CircleCheck,
   CircleDashed,
   Info,
+  Layers,
   PiggyBank,
   Plus,
   ReceiptText,
   ShieldAlert,
   Sparkles,
+  TrendingDown,
+  TrendingUp,
   Users,
   Wallet,
 } from 'lucide-react'
 import { ActionButton } from '@/components/action-button'
-import { Meter, Notice, SectionTitle } from '@/components/bits'
+import { Notice } from '@/components/bits'
 import { OccurrenceActions } from '@/components/occurrence-actions'
-import { PageHeader } from '@/components/page-header'
 import { SpendingTrend, type TrendPoint } from '@/components/spending-trend'
 import { ModeBadge, OccurrenceBadge } from '@/components/status'
 import { buttonVariants } from '@/components/ui/button'
@@ -41,7 +44,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   const views = billViews(db, today)
   const action = needsAction(views)
-  const upcoming = views.filter((v) => v.occ && v.occ.status === 'upcoming' && (v.daysLeft ?? 99) <= 14).slice(0, 5)
+  const upcoming = views.filter((v) => v.occ && v.occ.status === 'upcoming' && (v.daysLeft ?? 99) <= 14).slice(0, 6)
   const due7 = views.filter((v) => v.occ && (v.daysLeft ?? 99) <= 7 && v.occ.status !== 'processing')
   const due7Total = due7.reduce((s, v) => s + (v.occ?.amount ?? 0), 0)
 
@@ -54,6 +57,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const spentSince = since.reduce((s, e) => s + e.amount, 0)
   const entered = p.currentBalance + spentSince
   const afterBills = p.currentBalance - due7Total
+  const monthlyIncome = p.monthlyIncome || entered
+  const netMonthly = Math.max(0, monthlyIncome - spent)
 
   const trend: TrendPoint[] = Array.from({ length: 6 }, (_, i) => {
     const key = shiftMonthKey(month, i - 5)
@@ -79,20 +84,14 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const fresh = !guest && db.bills.length === 0 && db.expenses.length === 0
   const showChecklist = !guest && steps.some((s) => !s.done) && (fresh || db.bills.length + db.expenses.length < 3)
 
-  const quick = [
-    { href: '/expenses/new', label: 'Add expense', icon: Plus, tone: 'bg-success-soft text-success' },
-    { href: '/bills/new', label: 'Add a bill', icon: ReceiptText, tone: 'bg-secondary text-secondary-foreground' },
-    { href: '/budgets', label: 'Check budgets', icon: PiggyBank, tone: 'bg-warning-soft text-warning' },
-    { href: '/drill', label: 'Run crisis drill', icon: ShieldAlert, tone: 'bg-danger-soft text-danger' },
-    { href: '/groups', label: 'Split with group', icon: Users, tone: 'bg-muted text-foreground' },
-  ]
-
   return (
     <>
-      <PageHeader
-        title={guest ? `Sample household: ${p.name}’s money` : `Hi ${p.name} 👋`}
-        description={`${formatDateLong(today)}. ${action.length ? 'Here’s what needs your attention.' : 'Here’s where things stand.'}`}
-      />
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Dashboard</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Welcome! Here’s your financial overview · {formatDateLong(today)}
+        </p>
+      </div>
 
       {sp.welcome && !guest && (
         <Notice tone="success" className="mb-5" title="You’re in. This is your own account.">
@@ -108,13 +107,15 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       {sp.deleted && <Notice tone="info" className="mb-5" title="Your account was deleted">Your login and all your data were erased.</Notice>}
 
       {guest && (
-        <Card className="mb-6 overflow-hidden border-primary/25 bg-gradient-to-br from-secondary/80 to-card p-6">
+        <Card className="mb-6 overflow-hidden border-primary/30 bg-gradient-to-br from-secondary/90 via-card to-card p-6 shadow-sm">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="max-w-xl">
-              <p className="flex items-center gap-2 text-xs font-bold tracking-wider text-secondary-foreground uppercase">
+              <p className="flex items-center gap-2 text-xs font-bold tracking-wider text-primary uppercase">
                 <Sparkles className="size-4" aria-hidden /> Explore without an account
               </p>
-              <h2 className="mt-2 text-xl font-bold tracking-tight">Track spending, choose how each bill gets paid, and rehearse money emergencies.</h2>
+              <h2 className="mt-2 text-xl font-bold tracking-tight text-foreground">
+                Track spending, choose how each bill gets paid, and rehearse money emergencies.
+              </h2>
               <p className="mt-1.5 text-sm text-muted-foreground">
                 Everything here is sample data. Look around freely: when you want to save something of your own, Tinku asks you to sign up and keeps
                 what you typed.
@@ -177,40 +178,40 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </Card>
       )}
 
-      {/* Primary: money available, with how it's worked out */}
-      <Card className="p-6">
+      {/* Hero Card: Total of All Accounts / Available Balance (DailyDime style) */}
+      <Card className="mb-4 p-6 shadow-sm border-slate-200/80 dark:border-slate-800">
         <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
           <div className="flex items-start gap-4">
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-secondary text-secondary-foreground">
-              <Wallet className="size-6" aria-hidden />
+            <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-sky-50 text-sky-600 dark:bg-sky-950/50 dark:text-sky-400 border border-sky-100 dark:border-sky-900">
+              <Wallet className="size-7" aria-hidden />
             </span>
             <div>
-              <p className="text-sm font-medium text-muted-foreground">Money available</p>
-              <p className={cn('text-4xl font-bold tracking-tight tabular-nums', p.currentBalance < 0 && 'text-danger')}>{formatINR(p.currentBalance)}</p>
+              <p className="text-sm font-medium text-muted-foreground">Total of All Accounts</p>
+              <p className={cn('text-3xl font-extrabold tracking-tight sm:text-4xl tabular-nums text-foreground', p.currentBalance < 0 && 'text-danger')}>
+                {formatINR(p.currentBalance)}
+              </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                After bills due in the next 7 days:{' '}
-                <span className={cn('font-semibold', afterBills < 0 ? 'text-danger' : 'text-foreground')}>{formatINR(afterBills)}</span>
+                Combined balance across accounts ·{' '}
+                <span className="font-semibold text-foreground">
+                  {formatINR(afterBills)}
+                </span>{' '}
+                available after this week&apos;s bills
               </p>
             </div>
           </div>
-          <details className="group rounded-xl border bg-muted/40 px-4 py-3 text-sm md:max-w-sm">
-            <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold">
+          <details className="group rounded-2xl border bg-muted/30 px-4 py-3 text-sm md:max-w-sm">
+            <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold text-foreground hover:text-primary">
               <Info className="size-4 text-primary" aria-hidden /> How is this calculated?
             </summary>
-            <ul className="mt-2 space-y-1 text-muted-foreground">
-              <li>
-                {formatINR(entered)} you set on {formatDateTime(p.balanceUpdatedAt)}
-              </li>
-              <li>
-                − {formatINR(spentSince)} in {since.length} expense{since.length === 1 ? '' : 's'} and bill payment{since.length === 1 ? '' : 's'} recorded
-                since then
-              </li>
-              <li className="font-semibold text-foreground">= {formatINR(p.currentBalance)} available now</li>
+            <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+              <li>{formatINR(entered)} initial balance on {formatDateTime(p.balanceUpdatedAt)}</li>
+              <li>− {formatINR(spentSince)} in {since.length} recorded expenses & bill payments</li>
+              <li className="font-semibold text-foreground">= {formatINR(p.currentBalance)} available right now</li>
               <li className="pt-1">
-                Your {formatINR(p.emergencyReserve)} emergency reserve is kept separate and isn’t counted.{' '}
+                Emergency reserve: {formatINR(p.emergencyReserve)} kept aside.{' '}
                 {!guest && (
                   <Link href="/settings" className="font-medium text-primary hover:underline">
-                    Update your balance
+                    Edit balance
                   </Link>
                 )}
               </li>
@@ -219,187 +220,267 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </div>
       </Card>
 
-      {/* Secondary: this month and the next 7 days */}
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <Link href="/budgets" className="rounded-2xl border bg-card p-5 transition hover:border-primary/40">
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-sm font-medium text-muted-foreground">Spent this month</p>
-            <PiggyBank className="size-5 text-muted-foreground" aria-hidden />
-          </div>
-          <p className="mt-1 text-2xl font-bold tracking-tight tabular-nums">{formatINR(spent)}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {budget > 0 ? (spent > budget ? `${formatINR(spent - budget)} over your ${formatINR(budget)} budget` : `${formatINR(budget - spent)} left of ${formatINR(budget)}`) : 'No budget set yet'}
-          </p>
-          {budget > 0 && (
-            <div className="mt-3">
-              <Meter value={spent} max={budget} label="Spent this month against budget" />
+      {/* 4 Stat Summary Cards (DailyDime Signature 4-Card Row) */}
+      <div className="mb-8 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        {/* Card 1: Total Bills / Accounts */}
+        <Link href="/bills" className="group rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-card p-4 transition-all hover:shadow-md hover:border-primary/40">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:bg-sky-950/50 dark:text-sky-400 border border-sky-100 dark:border-sky-900">
+              <Layers className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-muted-foreground">Active Bills</p>
+              <p className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">{db.bills.filter((b) => b.active).length}</p>
             </div>
-          )}
-        </Link>
-        <Link href="/bills" className="rounded-2xl border bg-card p-5 transition hover:border-primary/40">
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-sm font-medium text-muted-foreground">Bills due in the next 7 days</p>
-            <CalendarClock className="size-5 text-muted-foreground" aria-hidden />
           </div>
-          <p className="mt-1 text-2xl font-bold tracking-tight tabular-nums">{formatINR(due7Total)}</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {due7.length === 0 ? 'Nothing due this week' : `${due7.length} bill${due7.length === 1 ? '' : 's'}: ${due7.map((v) => v.bill.name).slice(0, 3).join(', ')}${due7.length > 3 ? '…' : ''}`}
-          </p>
         </Link>
-      </div>
 
-      {/* Next: what needs the person, with the reason and the action */}
-      <section className="mt-8">
-        <SectionTitle>Needs your action</SectionTitle>
-        {action.length === 0 ? (
-          <Card className="flex items-center gap-3 p-5">
-            <CircleCheck className="size-6 text-success" aria-hidden />
-            <div>
-              <p className="font-semibold">You’re all caught up</p>
-              <p className="text-sm text-muted-foreground">
-                {db.bills.length ? 'No bills are waiting for you right now.' : 'Add a bill and Tinku will tell you here when it needs you.'}
+        {/* Card 2: Monthly Income */}
+        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-card p-4 transition-all hover:shadow-md">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900">
+              <TrendingUp className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-muted-foreground">Monthly Income</p>
+              <p className="text-xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 sm:text-2xl tabular-nums">
+                {formatINR(monthlyIncome)}
               </p>
             </div>
-          </Card>
-        ) : (
-          <div className="space-y-3">
-            {action.map(({ bill, occ, due }) => (
-              <Card key={occ!.id} className="border-l-4 border-l-warning-fill p-5">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link href={`/bills/${bill.id}`} className="font-semibold hover:underline">
-                        {bill.name}
-                      </Link>
-                      <OccurrenceBadge status={occ!.status} mode={bill.mode} />
-                    </div>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      <span className="font-semibold text-foreground">{formatINR(occ!.amount)}</span> · {dueLabel(due!, today)}
-                    </p>
-                    {occ!.note && <p className="mt-1 text-sm">Why: {occ!.note}</p>}
-                  </div>
-                  <OccurrenceActions occ={occ!} bill={bill} />
-                </div>
-              </Card>
-            ))}
           </div>
-        )}
-      </section>
+        </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <section>
-          <SectionTitle
-            action={
-              <Link href="/bills" className="text-sm font-semibold text-primary hover:underline">
-                All bills
-              </Link>
-            }
-          >
-            Coming up
-          </SectionTitle>
-          <Card className="divide-y">
-            {upcoming.length === 0 && <p className="p-5 text-sm text-muted-foreground">Nothing due in the next two weeks.</p>}
-            {upcoming.map(({ bill, occ, due }) => (
-              <Link key={bill.id} href={`/bills/${bill.id}`} className="flex items-center gap-3 p-4 hover:bg-muted/50">
-                <div className="flex size-11 shrink-0 flex-col items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
-                  <span className="text-[10px] leading-none font-bold uppercase">{formatDate(due!).split(' ')[1]}</span>
-                  <span className="text-base leading-tight font-bold">{formatDate(due!).split(' ')[0]}</span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{bill.name}</p>
-                  <p className="text-sm text-muted-foreground">{dueLabel(due!, today)}</p>
-                </div>
-                <div className="flex flex-col items-end gap-1">
-                  <span className="font-semibold">{formatINR(occ!.amount)}</span>
-                  <ModeBadge mode={bill.mode} />
-                </div>
-              </Link>
-            ))}
-          </Card>
-        </section>
-
-        <section>
-          <SectionTitle>Quick actions</SectionTitle>
-          <div className="space-y-2">
-            {quick.map(({ href, label, icon: Icon, tone }) => (
-              <Link key={href} href={href} className="flex items-center gap-3 rounded-xl border bg-card p-3 transition hover:border-primary/40 hover:shadow-sm">
-                <span className={cn('flex size-9 items-center justify-center rounded-lg', tone)}>
-                  <Icon className="size-[18px]" aria-hidden />
-                </span>
-                <span className="flex-1 text-sm font-semibold">{label}</span>
-                <ArrowRight className="size-4 text-muted-foreground" aria-hidden />
-              </Link>
-            ))}
-          </div>
-          <Link
-            href="/drill"
-            className={cn('mt-3 flex items-center gap-3 rounded-2xl border p-4 transition hover:shadow-sm', lastDrill ? 'bg-card' : 'border-primary/30 bg-secondary/60')}
-          >
-            <ShieldAlert className="size-5 shrink-0 text-primary" aria-hidden />
-            <div className="min-w-0 flex-1 text-sm">
-              {lastDrill ? (
-                <>
-                  <p className="font-semibold">
-                    Last drill: {lastDrill.passed ? 'passed' : 'ran short'} · {lastDrill.score}/100
-                  </p>
-                  <p className="truncate text-muted-foreground">{lastDrill.scenarioLabel}</p>
-                </>
-              ) : (
-                <>
-                  <p className="font-semibold">Could you handle an emergency?</p>
-                  <p className="text-muted-foreground">Run a 1-minute drill on {guest ? 'the sample' : 'your'} bills.</p>
-                </>
-              )}
+        {/* Card 3: Monthly Expenses */}
+        <Link href="/expenses" className="group rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-card p-4 transition-all hover:shadow-md hover:border-rose-400">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400 border border-rose-100 dark:border-rose-900">
+              <TrendingDown className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-muted-foreground">Monthly Expenses</p>
+              <p className="text-xl font-bold tracking-tight text-rose-600 dark:text-rose-400 sm:text-2xl tabular-nums">
+                {formatINR(spent)}
+              </p>
             </div>
-          </Link>
-        </section>
+          </div>
+        </Link>
+
+        {/* Card 4: Net Monthly */}
+        <Link href="/budgets" className="group rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-card p-4 transition-all hover:shadow-md hover:border-teal-400">
+          <div className="flex items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-600 dark:bg-teal-950/50 dark:text-teal-400 border border-teal-100 dark:border-teal-900">
+              <PiggyBank className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-muted-foreground">Net Monthly</p>
+              <p className="text-xl font-bold tracking-tight text-teal-600 dark:text-teal-400 sm:text-2xl tabular-nums">
+                {formatINR(netMonthly)}
+              </p>
+            </div>
+          </div>
+        </Link>
       </div>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <section>
-          <SectionTitle
-            action={
-              <Link href="/expenses" className="text-sm font-semibold text-primary hover:underline">
-                Expenses
+      {/* Main Two-Column Layout (DailyDime + Mint Budget layout) */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Left Column: Quick Actions + Spending Trend */}
+        <div className="space-y-6">
+          {/* Quick Actions (Exact DailyDime Pastel Pills) */}
+          <Card className="p-5 shadow-sm border-slate-200/80 dark:border-slate-800">
+            <h2 className="text-base font-bold text-foreground">Quick Actions</h2>
+            <div className="mt-4 space-y-2.5">
+              <Link
+                href="/expenses/new"
+                className="flex items-center justify-between rounded-xl border border-emerald-200/70 bg-emerald-50/70 hover:bg-emerald-100/80 px-4 py-3.5 text-emerald-950 transition dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200 shadow-2xs"
+              >
+                <span className="flex items-center gap-3 text-sm font-semibold">
+                  <ReceiptText className="size-5 text-emerald-700 dark:text-emerald-400" /> Record Expense
+                </span>
+                <Plus className="size-4 text-emerald-600" />
               </Link>
-            }
-          >
-            Spending trend
-          </SectionTitle>
-          <Card className="p-5">
-            <p className="mb-3 text-sm text-muted-foreground">Day-to-day spending per month (bills not included)</p>
-            {hasTrend ? (
-              <SpendingTrend points={trend} budget={everydayBudget} />
-            ) : (
-              <p className="py-8 text-center text-sm text-muted-foreground">Your trend appears after you record a few expenses.</p>
-            )}
-          </Card>
-        </section>
 
-        <section>
-          <SectionTitle
-            action={
-              <Link href="/notifications" className="text-sm font-semibold text-primary hover:underline">
-                See all
+              <Link
+                href="/bills/new"
+                className="flex items-center justify-between rounded-xl border border-sky-200/70 bg-sky-50/70 hover:bg-sky-100/80 px-4 py-3.5 text-sky-950 transition dark:border-sky-900/60 dark:bg-sky-950/40 dark:text-sky-200 shadow-2xs"
+              >
+                <span className="flex items-center gap-3 text-sm font-semibold">
+                  <CalendarClock className="size-5 text-sky-700 dark:text-sky-400" /> Add New Bill
+                </span>
+                <Plus className="size-4 text-sky-600" />
               </Link>
-            }
-          >
-            Recent activity
-          </SectionTitle>
-          <Card className="divide-y">
-            {recent.length === 0 && <p className="p-5 text-sm text-muted-foreground">No updates yet.</p>}
-            {recent.map((n) => (
-              <Link key={n.id} href={n.href ?? '/notifications'} className="flex items-start gap-3 p-4 hover:bg-muted/50">
-                <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', n.read ? 'bg-border' : 'bg-primary')} aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold">{n.title}</p>
-                  <p className="line-clamp-2 text-sm text-muted-foreground">{n.body}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{formatDateTime(n.at)}</p>
-                </div>
+
+              <Link
+                href="/budgets"
+                className="flex items-center justify-between rounded-xl border border-purple-200/70 bg-purple-50/70 hover:bg-purple-100/80 px-4 py-3.5 text-purple-950 transition dark:border-purple-900/60 dark:bg-purple-950/40 dark:text-purple-200 shadow-2xs"
+              >
+                <span className="flex items-center gap-3 text-sm font-semibold">
+                  <PiggyBank className="size-5 text-purple-700 dark:text-purple-400" /> Check Budgets
+                </span>
+                <ArrowRight className="size-4 text-purple-600" />
               </Link>
-            ))}
+
+              <Link
+                href="/drill"
+                className="flex items-center justify-between rounded-xl border border-rose-200/70 bg-rose-50/70 hover:bg-rose-100/80 px-4 py-3.5 text-rose-950 transition dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-200 shadow-2xs"
+              >
+                <span className="flex items-center gap-3 text-sm font-semibold">
+                  <ShieldAlert className="size-5 text-rose-700 dark:text-rose-400" /> Run Crisis Drill
+                </span>
+                <ArrowRight className="size-4 text-rose-600" />
+              </Link>
+
+              <Link
+                href="/groups"
+                className="flex items-center justify-between rounded-xl border border-amber-200/70 bg-amber-50/70 hover:bg-amber-100/80 px-4 py-3.5 text-amber-950 transition dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200 shadow-2xs"
+              >
+                <span className="flex items-center gap-3 text-sm font-semibold">
+                  <Users className="size-5 text-amber-700 dark:text-amber-400" /> Split with Group
+                </span>
+                <ArrowRight className="size-4 text-amber-600" />
+              </Link>
+            </div>
           </Card>
-        </section>
+
+          {/* Spending Trend (Mint Bonus Income Bar Chart Style) */}
+          <Card className="p-5 shadow-sm border-slate-200/80 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-foreground">Monthly Spending Trend</h2>
+                <p className="text-xs text-muted-foreground">Day-to-day spending (bills separate)</p>
+              </div>
+              <Link href="/expenses" className="text-xs font-semibold text-primary hover:underline">
+                View all
+              </Link>
+            </div>
+            <div className="mt-4">
+              {hasTrend ? (
+                <SpendingTrend points={trend} budget={everydayBudget} />
+              ) : (
+                <p className="py-8 text-center text-sm text-muted-foreground">Your trend appears after recording expenses.</p>
+              )}
+            </div>
+          </Card>
+        </div>
+
+        {/* Right Column: Upcoming & Action Items (DailyDime Style) */}
+        <div className="space-y-6">
+          {/* Needs your action */}
+          {action.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                <AlertCircle className="size-4 text-amber-500" /> Needs your action ({action.length})
+              </h2>
+              <div className="space-y-2.5">
+                {action.map(({ bill, occ, due }) => (
+                  <Card key={occ!.id} className="border-l-4 border-l-amber-500 p-4 shadow-sm">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Link href={`/bills/${bill.id}`} className="font-semibold text-foreground hover:underline">
+                            {bill.name}
+                          </Link>
+                          <OccurrenceBadge status={occ!.status} mode={bill.mode} />
+                        </div>
+                        <p className="mt-1 text-sm font-medium text-muted-foreground">
+                          <span className="font-bold text-foreground">{formatINR(occ!.amount)}</span> · {dueLabel(due!, today)}
+                        </p>
+                        {occ!.note && <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400 font-medium">{occ!.note}</p>}
+                      </div>
+                      <OccurrenceActions occ={occ!} bill={bill} />
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Upcoming Section (DailyDime signature cards) */}
+          <Card className="p-5 shadow-sm border-slate-200/80 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground">Upcoming Bills</h2>
+              <Link href="/bills" className="text-xs font-semibold text-primary hover:underline">
+                View all ({upcoming.length})
+              </Link>
+            </div>
+            <div className="mt-4 space-y-2.5">
+              {upcoming.length === 0 ? (
+                <p className="py-6 text-center text-sm text-muted-foreground">No upcoming bills in the next 14 days.</p>
+              ) : (
+                upcoming.map(({ bill, occ, due }) => (
+                  <Link
+                    key={bill.id}
+                    href={`/bills/${bill.id}`}
+                    className="flex items-center justify-between rounded-xl border border-amber-200/50 bg-amber-50/30 hover:bg-amber-50/70 p-3.5 transition dark:border-amber-900/40 dark:bg-amber-950/20"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300">
+                        <CalendarClock className="size-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-foreground truncate">{bill.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {dueLabel(due!, today)} · {bill.frequency}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="font-bold text-sm tabular-nums text-foreground">{formatINR(occ!.amount)}</span>
+                      <ModeBadge mode={bill.mode} />
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </Card>
+
+          {/* Emergency Crisis Drill Teaser */}
+          <Card className="p-5 shadow-sm border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-card to-secondary/30">
+            <div className="flex items-start gap-4">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                <ShieldAlert className="size-6" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-sm text-foreground">
+                  {lastDrill ? `Last drill score: ${lastDrill.score}/100` : 'Money Emergency Simulation'}
+                </h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {lastDrill
+                    ? `Result: ${lastDrill.passed ? 'Safe reserve intact' : 'Shortage detected'} for ${lastDrill.scenarioLabel}`
+                    : 'Rehearse a sudden income loss or unexpected expense before it ever happens.'}
+                </p>
+                <Link href="/drill" className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'mt-3 font-semibold')}>
+                  Run Simulation
+                </Link>
+              </div>
+            </div>
+          </Card>
+
+          {/* Recent Activity */}
+          <Card className="p-5 shadow-sm border-slate-200/80 dark:border-slate-800">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-foreground">Recent Activity</h2>
+              <Link href="/notifications" className="text-xs font-semibold text-primary hover:underline">
+                View all
+              </Link>
+            </div>
+            <div className="mt-3 divide-y">
+              {recent.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">No updates yet.</p>
+              ) : (
+                recent.map((n) => (
+                  <Link key={n.id} href={n.href ?? '/notifications'} className="flex items-start gap-3 py-3 hover:opacity-80 transition">
+                    <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', n.read ? 'bg-border' : 'bg-primary')} aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-foreground">{n.title}</p>
+                      <p className="line-clamp-1 text-xs text-muted-foreground">{n.body}</p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">{formatDateTime(n.at)}</p>
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
       </div>
     </>
   )

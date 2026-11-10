@@ -35,18 +35,20 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
   return (
     <>
       <MailBadge />
-      <h1 className="mt-5 text-center text-2xl font-bold tracking-tight">{sp.new ? 'Account created! Now verify your email' : 'Verify your email'}</h1>
-      <p className="mt-2 text-center text-sm text-muted-foreground">
-        Enter the 6-digit code we sent to <span className="font-semibold text-foreground">{user.email}</span>. Verifying turns on payments and AutoPay.
-      </p>
+      <div className="text-center mt-4 mb-2">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Enter verification code</h1>
+        <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
+          We just emailed you. Please enter the 6-digit code sent to <span className="font-semibold text-foreground">{user.email}</span>.
+        </p>
+      </div>
       {!emailConfigured() && (
-        <div className="mt-4 flex gap-2.5 rounded-xl border border-warning-soft bg-warning-soft/70 p-3 text-sm">
+        <div className="mt-4 flex gap-2.5 rounded-2xl border border-warning-soft bg-warning-soft/70 p-3.5 text-sm">
           <FlaskConical className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
           <p>
             <span className="font-semibold">Demo:</span> this deployment can’t send email yet, so your code is shown here
             {demoCode ? (
               <>
-                : <span className="font-mono text-base font-bold tracking-widest">{demoCode}</span>
+                : <span className="font-mono text-base font-bold tracking-widest text-foreground">{demoCode}</span>
               </>
             ) : (
               '. Send a new code to see it.'
@@ -58,7 +60,7 @@ export default async function VerifyPage({ searchParams }: { searchParams: Promi
         <VerifyForm next={next} />
       </div>
       <p className="mt-5 text-center text-sm text-muted-foreground">
-        Didn’t get it? <ResendButton /> ·{' '}
+        Didn’t get the code? <ResendButton /> ·{' '}
         <Link href={next} className="font-medium hover:text-foreground">
           Do this later
         </Link>
