@@ -174,3 +174,4 @@ To ensure financial integrity, we built an exhaustive 32-point test suite (`scri
   - **Email:** `dixitakshara9683@gmail.com`
   - **Password:** `0987654321a`
 - **GitHub Repository:** [https://github.com/Anubhavsaxena2004/receiptmind](https://github.com/Anubhavsaxena2004/receiptmind)
+

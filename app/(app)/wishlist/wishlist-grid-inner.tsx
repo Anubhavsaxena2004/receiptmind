@@ -194,3 +194,4 @@ export default function WishlistGridInner({ rows }: { rows: WishlistProgressItem
     </div>
   )
 }
+

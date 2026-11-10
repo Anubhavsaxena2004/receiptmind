@@ -11,3 +11,4 @@ const Grid = dynamic(() => import('./wishlist-grid-inner'), {
 export function WishlistGrid({ rows }: { rows: WishlistProgressItem[] }) {
   return <Grid rows={rows} />
 }
+
