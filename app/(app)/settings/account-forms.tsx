@@ -114,19 +114,21 @@ export function ZapierConnect({ example }: { example: string }) {
   )
 }
 
-export function ZapierConnected() {
+export function ZapierConnected({ fromEnv }: { fromEnv?: boolean }) {
   return (
     <div className="flex flex-wrap gap-2">
       <ActionButton action={testZapier} variant="outline">
         <Send /> Send a test
       </ActionButton>
-      <ActionButton
-        action={disconnectZapier}
-        variant="ghost"
-        confirm={{ title: 'Disconnect Zapier?', body: 'New notifications will stay in Tinku only.', confirmLabel: 'Disconnect', tone: 'default' }}
-      >
-        <Unplug /> Disconnect
-      </ActionButton>
+      {!fromEnv && (
+        <ActionButton
+          action={disconnectZapier}
+          variant="ghost"
+          confirm={{ title: 'Disconnect Zapier?', body: 'New notifications will stay in Tinku only.', confirmLabel: 'Disconnect', tone: 'default' }}
+        >
+          <Unplug /> Disconnect
+        </ActionButton>
+      )}
     </div>
   )
 }

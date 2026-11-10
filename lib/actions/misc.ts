@@ -14,7 +14,7 @@ import { createGroupFor } from '../services'
 import { currentUser, NEED_LOGIN } from '../session'
 import { eraseUserDb, loadSampleIntoUserDb, logZapier, readUserDb, updateUserDb } from '../store'
 import type { ActionState } from '../types'
-import { isZapierHook, postToZapier, zapierPayload } from '../zapier'
+import { envZapierUrl, isZapierHook, postToZapier, zapierPayload } from '../zapier'
 
 // ---------- Settings ----------
 
@@ -123,8 +123,9 @@ export async function disconnectZapier(_prev: ActionState): Promise<ActionState>
 export async function testZapier(_prev: ActionState): Promise<ActionState> {
   const user = await currentUser()
   if (!user) return NEED_LOGIN
-  const z = (await readUserDb(user.id)).integrations?.zapier
-  if (!z || !isZapierHook(z.url)) return { error: 'Connect a Zapier hook first.' }
+  const envHook = envZapierUrl()
+  const z = (await readUserDb(user.id)).integrations?.zapier ?? (envHook ? { url: envHook, consentAt: new Date().toISOString(), log: [] } : undefined)
+  if (!z || !isZapierHook(z.url)) return { error: 'Connect a Zapier hook first or set ZAPIER_WEBHOOK_URL.' }
   const title = 'Test from Tinku'
   const r = await postToZapier(z.url, zapierPayload({ kind: 'system', title, body: 'If you can see this, your Zap is receiving Tinku notifications.', href: '/settings?tab=connections', at: new Date().toISOString() }))
   await logZapier(user.id, [{ at: new Date().toISOString(), title, ...r }])

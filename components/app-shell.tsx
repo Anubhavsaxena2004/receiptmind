@@ -373,7 +373,7 @@ export function AppShell({
               <FlaskConical className="size-3.5 text-primary" aria-hidden="true" /> {demoLabel}
             </Link>
 
-            <ThemeToggle />
+            <ThemeToggle className="hidden md:flex" />
 
             <Link
               href="/notifications"

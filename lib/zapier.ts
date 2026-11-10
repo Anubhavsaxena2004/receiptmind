@@ -15,6 +15,15 @@ export function isZapierHook(url: string): boolean {
   return HOOK.test(url.trim())
 }
 
+/**
+ * Global Zapier Catch Hook URL configured via environment variable (e.g. ZAPIER_WEBHOOK_URL on Vercel).
+ * Sanitizes surrounding quotes and whitespace.
+ */
+export function envZapierUrl(): string | undefined {
+  const raw = (process.env.ZAPIER_WEBHOOK_URL ?? '').trim().replace(/^["']|["']$/g, '').trim()
+  return raw && isZapierHook(raw) ? raw : undefined
+}
+
 /** Exactly what leaves Tinku. Shown to the user before they connect. */
 export function zapierPayload(n: Pick<AppNotification, 'kind' | 'title' | 'body' | 'href' | 'at'>) {
   const base = process.env.APP_URL?.replace(/\/$/, '') ?? ''

@@ -2,7 +2,7 @@ import { deleteDoc, readDoc, updateDoc, writeDoc } from './db'
 import { takePending } from './notify'
 import { createEmptyDb, createSeed } from './seed'
 import type { Db } from './types'
-import { isZapierHook, postToZapier, runAfterResponse, zapierPayload } from './zapier'
+import { envZapierUrl, isZapierHook, postToZapier, runAfterResponse, zapierPayload } from './zapier'
 
 /**
  * One document per account. The key always comes from the signed-in session on
@@ -40,7 +40,8 @@ export function deleteUserDb(userId: string): Promise<void> {
 /** Hands this save's new notifications to the user's own Zapier hook, after the response. */
 function deliver(userId: string, db: Db): void {
   const items = takePending(db)
-  const hook = db.integrations?.zapier
+  const envHook = envZapierUrl()
+  const hook = db.integrations?.zapier ?? (envHook ? { url: envHook, consentAt: new Date().toISOString(), log: [] } : undefined)
   if (!items.length || !hook || !isZapierHook(hook.url)) return
   runAfterResponse(async () => {
     const results = []
@@ -54,8 +55,13 @@ function deliver(userId: string, db: Db): void {
 
 export function logZapier(userId: string, entries: { at: string; title: string; ok: boolean; detail: string }[]): Promise<void> {
   return updateUserDb(userId, (db) => {
-    const z = db.integrations?.zapier
-    if (!z) return
+    db.integrations ??= {}
+    db.integrations.zapier ??= {
+      url: envZapierUrl() ?? '',
+      consentAt: new Date().toISOString(),
+      log: [],
+    }
+    const z = db.integrations.zapier
     z.log = [...entries.reverse(), ...z.log].slice(0, 20)
   })
 }

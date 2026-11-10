@@ -211,7 +211,7 @@
   --sidebar-ring: #f25a0c;
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: dark) and (min-width: 1024px) {
   :root:not(.light) {
     color-scheme: dark;
     --background: #181817;
@@ -260,6 +260,82 @@
     --sidebar-accent-foreground: #f7854a;
     --sidebar-border: #3b3a39;
     --sidebar-ring: #f25a0c;
+  }
+}
+
+/*
+ * Mobile View: Force clean Light Mode on mobile screens (< 1024px)
+ * despite device dark mode or .dark class
+ */
+@media (max-width: 1023px) {
+  :root,
+  html,
+  body,
+  .dark,
+  [data-theme='dark'] {
+    color-scheme: light !important;
+
+    /* Surfaces */
+    --background: #fefefd !important;
+    --surface: #f7f7f5 !important;
+    --card: #ffffff !important;
+    --card-foreground: #0e0d0d !important;
+    --elevated: #e8e3df !important;
+    --popover: #ffffff !important;
+    --popover-foreground: #0e0d0d !important;
+
+    /* Typography */
+    --foreground: #0e0d0d !important;
+    --text-primary: #0e0d0d !important;
+    --text-secondary: #615a56 !important;
+    --text-muted: #878584 !important;
+
+    /* Brand Orange */
+    --primary: #fb7507 !important;
+    --primary-foreground: #ffffff !important;
+    --secondary: #fff5ed !important;
+    --secondary-foreground: #d97c2f !important;
+    --warm-accent: #edac72 !important;
+
+    /* Neutral & Secondary */
+    --muted: #f7f7f5 !important;
+    --muted-foreground: #615a56 !important;
+    --accent: #fff5ed !important;
+    --accent-foreground: #d97c2f !important;
+
+    /* Structural */
+    --border: #dcd7d3 !important;
+    --input: #dcd7d3 !important;
+    --ring: #fb7507 !important;
+
+    /* Status */
+    --success: #16a34a !important;
+    --success-soft: #dcfce7 !important;
+    --warning: #d97706 !important;
+    --warning-soft: #fef3c7 !important;
+    --warning-fill: #f59e0b !important;
+    --danger: #dc2626 !important;
+    --danger-soft: #fee2e2 !important;
+    --destructive: #dc2626 !important;
+    --info: #2563eb !important;
+    --info-soft: #eff6ff !important;
+
+    /* Charts */
+    --chart-1: #fb7507 !important;
+    --chart-2: #d97c2f !important;
+    --chart-3: #edac72 !important;
+    --chart-4: #dcd7d3 !important;
+    --chart-5: #878584 !important;
+
+    /* Sidebar */
+    --sidebar: #f7f7f5 !important;
+    --sidebar-foreground: #0e0d0d !important;
+    --sidebar-primary: #fb7507 !important;
+    --sidebar-primary-foreground: #ffffff !important;
+    --sidebar-accent: #fff5ed !important;
+    --sidebar-accent-foreground: #d97c2f !important;
+    --sidebar-border: #dcd7d3 !important;
+    --sidebar-ring: #fb7507 !important;
   }
 }
 

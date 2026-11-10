@@ -18,7 +18,7 @@ import { storageKind } from '@/lib/db'
 import { formatDateTime } from '@/lib/format'
 import { getViewer } from '@/lib/session'
 import { cn } from '@/lib/utils'
-import { zapierPayload } from '@/lib/zapier'
+import { envZapierUrl, zapierPayload } from '@/lib/zapier'
 
 export const metadata: Metadata = { title: 'Settings' }
 
@@ -75,7 +75,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const user = viewer.kind === 'user' ? viewer.user : null
   const p = db.profile
   const storage = storageKind()
-  const zapier = db.integrations?.zapier
+  const envZapier = envZapierUrl()
+  const zapier = db.integrations?.zapier ?? (envZapier ? {
+    url: envZapier,
+    consentAt: new Date().toISOString(),
+    log: db.integrations?.zapier?.log ?? [],
+  } : undefined)
 
   return (
     <>
@@ -245,6 +250,17 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   on={googleConfigured()}
                   text={googleConfigured() ? '“Continue with Google” is on.' : 'Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to add “Continue with Google”.'}
                 />
+                <StatusRow
+                  name="Zapier webhook"
+                  on={Boolean(envZapier || zapier)}
+                  text={
+                    envZapier
+                      ? 'Connected via ZAPIER_WEBHOOK_URL environment variable. Notifications are forwarded automatically to your Zap.'
+                      : zapier
+                        ? 'Connected to your personal Zapier Catch Hook.'
+                        : 'Set ZAPIER_WEBHOOK_URL in environment or connect a hook below.'
+                  }
+                />
               </ul>
             </CardBody>
           </Card>
@@ -255,7 +271,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               description="Optional. Forward your Tinku notifications to email, WhatsApp, Slack or Google Sheets through your own Zap."
             />
             <CardBody>
-              {!user ? (
+              {!user && !envZapier ? (
                 <p className="text-sm text-muted-foreground">
                   <Link href="/signup?next=/settings?tab=connections" className="font-semibold text-primary hover:underline">
                     Sign up
@@ -264,15 +280,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 </p>
               ) : zapier ? (
                 <div className="space-y-4">
-                  <p className="flex items-center gap-2 text-sm">
+                  <p className="flex items-center gap-2 text-sm font-semibold">
                     <CircleCheck className="size-4 text-success" aria-hidden />
-                    Connected {formatDateTime(zapier.consentAt)} · <span className="truncate font-mono text-xs">{zapier.url.replace(/\/[^/]+\/?$/, '/•••')}</span>
+                    Connected {envZapier && !db.integrations?.zapier ? '(via Vercel Environment)' : `on ${formatDateTime(zapier.consentAt)}`} ·{' '}
+                    <span className="truncate font-mono text-xs">{zapier.url.replace(/\/[^/]+\/?$/, '/•••')}</span>
                   </p>
-                  <ZapierConnected />
+                  <ZapierConnected fromEnv={Boolean(envZapier && !db.integrations?.zapier)} />
                   <div>
                     <p className="mb-2 text-sm font-semibold">Recent deliveries</p>
                     {zapier.log.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Nothing sent yet. Send a test, or wait for the next notification.</p>
+                      <p className="text-sm text-muted-foreground">Nothing sent yet. Click “Send a test” to verify your Zap.</p>
                     ) : (
                       <ul className="divide-y rounded-xl border">
                         {zapier.log.slice(0, 8).map((l, i) => (
