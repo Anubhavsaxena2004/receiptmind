@@ -2,83 +2,31 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { createOccurrence, currentMandate, effectiveDate, isResolved, openOccurrence, settleOccurrence } from '../bills'
-import { isCategoryId } from '../categories'
-import { addDays, isISODate, todayISO } from '../dates'
-import { updateDb } from '../db'
+import { effectiveDate, isResolved, settleOccurrence } from '../bills'
+import { addDays, todayISO } from '../dates'
 import { getOrigin } from '../data'
-import { newId } from '../ids'
 import { notify } from '../notify'
 import { approveSimulated, cancelCheckout, refreshPayment, startCheckout, UserError } from '../payments'
-import type { ActionState, Bill, Frequency, PaymentMode } from '../types'
-
-const FREQUENCIES: Frequency[] = ['once', 'weekly', 'monthly', 'quarterly', 'yearly']
-const MODES: PaymentMode[] = ['reminder', 'manual', 'autopay']
+import { saveBillFor } from '../services'
+import { currentUser, isVerified, NEED_LOGIN, NEED_VERIFY } from '../session'
+import { updateUserDb } from '../store'
+import type { ActionState } from '../types'
 
 export async function saveBill(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  const id = String(fd.get('id') ?? '') || undefined
-  const name = String(fd.get('name') ?? '').trim()
-  const payee = String(fd.get('payee') ?? '').trim()
-  const amount = Number(fd.get('amount'))
-  const cat = fd.get('category')
-  const frequency = fd.get('frequency') as Frequency
-  const mode = fd.get('mode') as PaymentMode
-  const dueDate = fd.get('dueDate')
-  const essential = fd.get('essential') === 'on'
-
-  if (!name) return { error: 'Give the bill a name, like “Electricity”.' }
-  if (!Number.isFinite(amount) || amount <= 0) return { error: 'Enter the bill amount.' }
-  if (!isCategoryId(cat)) return { error: 'Pick a category.' }
-  if (!FREQUENCIES.includes(frequency)) return { error: 'Pick how often this bill repeats.' }
-  if (!MODES.includes(mode)) return { error: 'Choose how Tinku should handle this bill.' }
-  if (!isISODate(dueDate)) return { error: 'Pick the next due date.' }
-
-  const result = await updateDb((db) => {
-    let bill: Bill | undefined
-    if (id) {
-      bill = db.bills.find((b) => b.id === id)
-      if (!bill) return { error: 'This bill no longer exists.' }
-      Object.assign(bill, { name, payee: payee || name, amount: Math.round(amount), category: cat, frequency, mode, essential })
-      const occ = openOccurrence(db, bill.id)
-      if (occ && occ.status !== 'processing') {
-        occ.amount = bill.amount
-        if (occ.dueDate !== dueDate) {
-          occ.dueDate = dueDate
-          occ.postponedTo = undefined
-          occ.remindedAt = undefined
-          if (occ.status === 'due') occ.status = 'upcoming'
-        }
-      } else if (!occ) {
-        createOccurrence(db, bill, dueDate)
-      }
-    } else {
-      bill = {
-        id: newId('bill'),
-        name,
-        payee: payee || name,
-        amount: Math.round(amount),
-        category: cat,
-        essential,
-        frequency,
-        mode,
-        active: true,
-        createdAt: new Date().toISOString(),
-      }
-      db.bills.push(bill)
-      createOccurrence(db, bill, dueDate)
-    }
-    const needsAuth = bill.mode === 'autopay' && currentMandate(db, bill.id)?.status !== 'active'
-    return { billId: bill.id, needsAuth }
-  })
+  const user = await currentUser()
+  if (!user) return NEED_LOGIN
+  const result = await saveBillFor(user.id, Object.fromEntries(fd))
   if ('error' in result) return { error: result.error }
-
+  const { bill, needsAutopayAuthorization } = result.ok
   revalidatePath('/', 'layout')
-  redirect(result.needsAuth ? `/autopay/new?bill=${result.billId}` : `/bills/${result.billId}?saved=1`)
+  redirect(needsAutopayAuthorization ? `/autopay/new?bill=${bill.id}` : `/bills/${bill.id}?saved=1`)
 }
 
 export async function deleteBill(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await currentUser()
+  if (!user) return NEED_LOGIN
   const id = String(fd.get('id') ?? '')
-  const error = await updateDb((db) => {
+  const error = await updateUserDb(user.id, (db) => {
     const bill = db.bills.find((b) => b.id === id)
     if (!bill) return 'This bill no longer exists.'
     if (db.occurrences.some((o) => o.billId === id && o.status === 'processing'))
@@ -93,15 +41,15 @@ export async function deleteBill(_prev: ActionState, fd: FormData): Promise<Acti
   redirect('/bills')
 }
 
-function findOpen(fd: FormData) {
-  return String(fd.get('occurrenceId') ?? '')
-}
+const occurrenceId = (fd: FormData) => String(fd.get('occurrenceId') ?? '')
 
 export async function postponeOccurrence(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  const occId = findOpen(fd)
+  const user = await currentUser()
+  if (!user) return NEED_LOGIN
+  const occId = occurrenceId(fd)
   const days = Math.min(30, Math.max(1, Number(fd.get('days') ?? 3) || 3))
   const today = todayISO()
-  const result = await updateDb((db) => {
+  const result = await updateUserDb(user.id, (db): ActionState => {
     const occ = db.occurrences.find((o) => o.id === occId)
     if (!occ || isResolved(occ.status)) return { error: 'This bill is already settled.' }
     if (occ.status === 'processing') return { error: 'A payment is processing for this bill. Check its status first.' }
@@ -117,8 +65,10 @@ export async function postponeOccurrence(_prev: ActionState, fd: FormData): Prom
 }
 
 export async function skipOccurrence(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  const occId = findOpen(fd)
-  const result = await updateDb((db) => {
+  const user = await currentUser()
+  if (!user) return NEED_LOGIN
+  const occId = occurrenceId(fd)
+  const result = await updateUserDb(user.id, (db): ActionState => {
     const occ = db.occurrences.find((o) => o.id === occId)
     if (!occ || isResolved(occ.status)) return { error: 'This bill is already settled.' }
     if (occ.status === 'processing') return { error: 'A payment is processing for this bill. Check its status first.' }
@@ -130,8 +80,10 @@ export async function skipOccurrence(_prev: ActionState, fd: FormData): Promise<
 }
 
 export async function markPaidOutside(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  const occId = findOpen(fd)
-  const result = await updateDb((db) => {
+  const user = await currentUser()
+  if (!user) return NEED_LOGIN
+  const occId = occurrenceId(fd)
+  const result = await updateUserDb(user.id, (db): ActionState => {
     const occ = db.occurrences.find((o) => o.id === occId)
     if (!occ || isResolved(occ.status)) return { error: 'This bill is already settled.' }
     if (occ.status === 'processing') return { error: 'A payment is processing in Tinku. Check its status before marking it paid elsewhere.' }
@@ -145,10 +97,12 @@ export async function markPaidOutside(_prev: ActionState, fd: FormData): Promise
 }
 
 export async function payNow(_prev: ActionState, fd: FormData): Promise<ActionState> {
-  const occId = findOpen(fd)
+  const user = await currentUser()
+  if (!user) return NEED_LOGIN
+  if (!isVerified(user)) return NEED_VERIFY
   let url: string
   try {
-    url = await startCheckout(occId, await getOrigin())
+    url = (await startCheckout(user.id, occurrenceId(fd), await getOrigin())).url
   } catch (err) {
     if (err instanceof UserError) return { error: err.message }
     console.error(err)
@@ -159,9 +113,12 @@ export async function payNow(_prev: ActionState, fd: FormData): Promise<ActionSt
 }
 
 export async function approveSimulatedPayment(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await currentUser()
+  if (!user) return NEED_LOGIN
+  if (!isVerified(user)) return NEED_VERIFY
   const id = String(fd.get('paymentId') ?? '')
   try {
-    await approveSimulated(id)
+    await approveSimulated(user.id, id)
   } catch (err) {
     return { error: err instanceof UserError ? err.message : 'Could not complete the payment.' }
   }
@@ -170,16 +127,20 @@ export async function approveSimulatedPayment(_prev: ActionState, fd: FormData):
 }
 
 export async function cancelSimulatedPayment(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await currentUser()
+  if (!user) return NEED_LOGIN
   const id = String(fd.get('paymentId') ?? '')
-  await cancelCheckout(id)
+  await cancelCheckout(user.id, id)
   revalidatePath('/', 'layout')
   redirect(`/payments/${id}`)
 }
 
 export async function refreshPaymentStatus(_prev: ActionState, fd: FormData): Promise<ActionState> {
+  const user = await currentUser()
+  if (!user) return NEED_LOGIN
   const id = String(fd.get('paymentId') ?? '')
   try {
-    await refreshPayment(id)
+    await refreshPayment(user.id, id)
   } catch (err) {
     console.error(err)
     return { error: 'Could not reach PayPal. Try again in a moment.' }

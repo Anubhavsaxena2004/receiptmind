@@ -1,10 +1,10 @@
 import { isResolved, settleOccurrence } from './bills'
 import { DEMO_INR_PER_USD, paypalConfigured } from './config'
-import { readDb, updateDb } from './db'
 import { formatINR } from './format'
 import { newId } from './ids'
 import { notify } from './notify'
 import * as paypal from './paypal'
+import { readUserDb, updateUserDb } from './store'
 import type { Db, Payment, PaymentStatus } from './types'
 
 /** An error whose message is safe and useful to show to the user. */
@@ -16,6 +16,19 @@ export function toUsd(inr: number): string {
 
 export function providerName(p: Pick<Payment, 'provider'>): string {
   return p.provider === 'paypal_sandbox' ? 'PayPal Sandbox' : 'the simulated provider'
+}
+
+/**
+ * PayPal's custom_id carries the owner and our payment id, so a signature-verified
+ * webhook can be routed to the right account without trusting anything else.
+ */
+export function paypalCustomId(userId: string, paymentId: string): string {
+  return `${userId}:${paymentId}`
+}
+
+export function parseCustomId(customId: string | undefined): { userId: string; paymentId: string } | null {
+  const m = /^(usr_[A-Za-z0-9]+):(pay_[A-Za-z0-9]+)$/.exec(customId ?? '')
+  return m ? { userId: m[1], paymentId: m[2] } : null
 }
 
 export interface Outcome {
@@ -89,9 +102,9 @@ export function applyOutcome(db: Db, paymentId: string, outcome: Outcome): Payme
 }
 
 /** Creates a payment for a bill occurrence and returns where to send the user to approve it. */
-export async function startCheckout(occurrenceId: string, origin: string): Promise<string> {
+export async function startCheckout(userId: string, occurrenceId: string, origin: string): Promise<{ url: string; paymentId: string }> {
   const usePaypal = paypalConfigured()
-  const created = await updateDb((db) => {
+  const created = await updateUserDb(userId, (db) => {
     const occ = db.occurrences.find((o) => o.id === occurrenceId)
     if (!occ) throw new UserError('This bill could not be found.')
     if (isResolved(occ.status)) throw new UserError('This bill is already settled.')
@@ -131,29 +144,32 @@ export async function startCheckout(occurrenceId: string, origin: string): Promi
     return payment
   })
 
-  if (!usePaypal) return `/pay/simulated?payment=${created.id}`
+  if (!usePaypal) return { url: `/pay/simulated?payment=${created.id}`, paymentId: created.id }
 
   try {
     const order = await paypal.createOrder({
-      requestId: created.idempotencyKey,
+      // Unique per payment: sample bills share IDs across accounts, so a bill-based key could
+      // make PayPal hand one account's order to another.
+      requestId: `create-${created.id}`,
       amount: created.chargeAmount,
       currency: 'USD',
-      customId: created.id,
+      customId: paypalCustomId(userId, created.id),
       description: `${created.label} (Tinku demo)`,
       returnUrl: `${origin}/api/paypal/return?payment=${created.id}`,
       cancelUrl: `${origin}/api/paypal/cancel?payment=${created.id}`,
     })
-    await updateDb((db) => {
+    await updateUserDb(userId, (db) => {
       const p = db.payments.find((x) => x.id === created.id)
       if (!p) return
       p.providerOrderId = order.id
       p.approveUrl = order.approveUrl
       p.events.push({ at: new Date().toISOString(), status: 'created', message: `PayPal order ${order.id} created` })
     })
-    return order.approveUrl
+    return { url: order.approveUrl, paymentId: created.id }
   } catch (err) {
     const message = err instanceof paypal.PayPalError ? err.message : 'Could not reach PayPal.'
-    await updateDb((db) => {
+    if (!(err instanceof paypal.PayPalError)) console.error('[paypal create order]', err)
+    await updateUserDb(userId, (db) => {
       const p = db.payments.find((x) => x.id === created.id)
       if (!p) return
       // Nothing was charged, so the bill itself is left exactly as it was.
@@ -162,12 +178,12 @@ export async function startCheckout(occurrenceId: string, origin: string): Promi
       p.updatedAt = now
       p.events.push({ at: now, status: 'failed', message: `Checkout could not start: ${message}` })
     })
-    return `/payments/${created.id}`
+    return { url: `/payments/${created.id}`, paymentId: created.id }
   }
 }
 
 /** Checks a PayPal order and turns it into a verified outcome. */
-export function verifyOrder(order: paypal.PayPalOrder, p: Payment): Outcome {
+export function verifyOrder(order: paypal.PayPalOrder, p: Payment, expectedCustomId: string): Outcome {
   const capture = order.purchase_units?.[0]?.payments?.captures?.[0]
   if (!capture) {
     if (['CREATED', 'APPROVED', 'PAYER_ACTION_REQUIRED', 'SAVED'].includes(order.status)) {
@@ -181,7 +197,7 @@ export function verifyOrder(order: paypal.PayPalOrder, p: Payment): Outcome {
       message: `Amount mismatch: PayPal reported ${capture.amount.value} ${capture.amount.currency_code}, expected ${p.chargeAmount} ${p.chargeCurrency}. Flagged for review, not marked paid.`,
     }
   }
-  if (capture.custom_id && capture.custom_id !== p.id) {
+  if (capture.custom_id && capture.custom_id !== expectedCustomId) {
     return { status: 'failed', message: 'PayPal capture belongs to a different payment. Not marked paid.' }
   }
   switch (capture.status) {
@@ -212,18 +228,18 @@ function billAlreadySettled(db: Db, p: Payment): boolean {
 }
 
 /** Called when the buyer returns from PayPal: capture on the server, then verify. */
-export async function capturePayPalPayment(paymentId: string, orderIdFromUrl: string | null): Promise<void> {
-  const db = await readDb()
+export async function capturePayPalPayment(userId: string, paymentId: string, orderIdFromUrl: string | null): Promise<void> {
+  const db = await readUserDb(userId)
   const p = db.payments.find((x) => x.id === paymentId)
   if (!p) throw new UserError('Payment not found.')
   // Only a live checkout may be captured: a replaced/cancelled/failed one never is.
   if ((p.status !== 'created' && p.status !== 'pending') || !p.providerOrderId) return
   if (p.status === 'created' && billAlreadySettled(db, p)) {
-    await updateDb((d) => applyOutcome(d, p.id, ALREADY_SETTLED))
+    await updateUserDb(userId, (d) => applyOutcome(d, p.id, ALREADY_SETTLED))
     return
   }
   if (orderIdFromUrl && orderIdFromUrl !== p.providerOrderId) {
-    await updateDb((d) =>
+    await updateUserDb(userId, (d) =>
       applyOutcome(d, p.id, { status: 'failed', message: 'The returned PayPal order did not match this payment. Nothing was marked paid.' }),
     )
     return
@@ -240,31 +256,31 @@ export async function capturePayPalPayment(paymentId: string, orderIdFromUrl: st
         err instanceof paypal.PayPalError
           ? { status: 'failed', message: `PayPal could not complete the payment: ${err.message}.` }
           : { status: 'pending', message: 'Could not confirm with PayPal yet. Check the status again in a moment.' }
-      await updateDb((d) => applyOutcome(d, p.id, outcome))
+      await updateUserDb(userId, (d) => applyOutcome(d, p.id, outcome))
       return
     }
   }
-  const outcome = verifyOrder(order, p)
-  await updateDb((d) => applyOutcome(d, p.id, outcome))
+  const outcome = verifyOrder(order, p, paypalCustomId(userId, p.id))
+  await updateUserDb(userId, (d) => applyOutcome(d, p.id, outcome))
 }
 
 /** Re-checks a pending PayPal payment with the provider. */
-export async function refreshPayment(paymentId: string): Promise<void> {
-  const db = await readDb()
+export async function refreshPayment(userId: string, paymentId: string): Promise<void> {
+  const db = await readUserDb(userId)
   const p = db.payments.find((x) => x.id === paymentId)
   if (!p) throw new UserError('Payment not found.')
   if (p.provider !== 'paypal_sandbox' || !p.providerOrderId) return
   const order = await paypal.getOrder(p.providerOrderId)
   if (order.status === 'APPROVED') {
-    await capturePayPalPayment(p.id, null)
+    await capturePayPalPayment(userId, p.id, null)
     return
   }
-  const outcome = verifyOrder(order, p)
-  await updateDb((d) => applyOutcome(d, p.id, outcome))
+  const outcome = verifyOrder(order, p, paypalCustomId(userId, p.id))
+  await updateUserDb(userId, (d) => applyOutcome(d, p.id, outcome))
 }
 
-export function cancelCheckout(paymentId: string): Promise<void> {
-  return updateDb((db) => {
+export function cancelCheckout(userId: string, paymentId: string): Promise<void> {
+  return updateUserDb(userId, (db) => {
     const p = db.payments.find((x) => x.id === paymentId)
     if (!p || p.status !== 'created') return
     applyOutcome(db, p.id, { status: 'cancelled', message: 'You cancelled the checkout. Nothing was charged.' })
@@ -272,8 +288,8 @@ export function cancelCheckout(paymentId: string): Promise<void> {
 }
 
 /** Simulated provider used when PayPal credentials are not configured. */
-export function approveSimulated(paymentId: string): Promise<void> {
-  return updateDb((db) => {
+export function approveSimulated(userId: string, paymentId: string): Promise<void> {
+  return updateUserDb(userId, (db) => {
     const p = db.payments.find((x) => x.id === paymentId)
     if (!p || p.provider !== 'simulated') throw new UserError('Payment not found.')
     if (p.status !== 'created') return
@@ -309,15 +325,15 @@ const WEBHOOK_STATUS: Record<string, Outcome['status']> = {
 }
 
 /** Applies a signature-verified webhook once (de-duplicated by event id). */
-export function applyWebhookEvent(db: Db, event: WebhookEvent): 'duplicate' | 'ignored' | 'applied' {
+export function applyWebhookEvent(db: Db, event: WebhookEvent, paymentId: string): 'duplicate' | 'ignored' | 'applied' {
   if (db.processedWebhookIds.includes(event.id)) return 'duplicate'
   db.processedWebhookIds.unshift(event.id)
   if (db.processedWebhookIds.length > 500) db.processedWebhookIds.length = 500
 
   const status = WEBHOOK_STATUS[event.event_type]
   const r = event.resource
-  if (!status || !r?.custom_id) return 'ignored'
-  const p = db.payments.find((x) => x.id === r.custom_id)
+  if (!status || !r) return 'ignored'
+  const p = db.payments.find((x) => x.id === paymentId)
   if (!p) return 'ignored'
   if (r.amount && (r.amount.value !== p.chargeAmount || r.amount.currency_code !== p.chargeCurrency)) return 'ignored'
   applyOutcome(db, p.id, { status, message: `PayPal webhook ${event.event_type} (signature verified).`, captureId: r.id })

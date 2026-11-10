@@ -1,12 +1,12 @@
 import { currentMandate, effectiveDate, openOccurrence } from './bills'
 import { DEMO_INR_PER_USD } from './config'
 import { diffDays, todayISO } from './dates'
-import { updateDb } from './db'
 import { formatDate, formatINR } from './format'
 import { newId } from './ids'
 import { notify } from './notify'
 import { applyOutcome, toUsd } from './payments'
-import type { Payment, PaymentMode } from './types'
+import { updateUserDb } from './store'
+import type { Db, Payment, PaymentMode } from './types'
 
 export interface SchedulerSummary {
   ranFor: string
@@ -28,8 +28,13 @@ function modeHint(mode: PaymentMode): string {
  * never sends the same reminder twice and never charges an occurrence twice.
  * Failed charges are never retried automatically.
  */
-export function runScheduler(today = todayISO()): Promise<SchedulerSummary> {
-  return updateDb((db) => {
+export function runScheduler(userId: string, today = todayISO()): Promise<SchedulerSummary> {
+  return updateUserDb(userId, (db) => applyDailyCheck(db, today))
+}
+
+/** The daily check itself, applied to one person's data (pure: no I/O). */
+export function applyDailyCheck(db: Db, today = todayISO()): SchedulerSummary {
+  {
     const s: SchedulerSummary = { ranFor: today, reminders: 0, awaitingYou: 0, autopayPaid: 0, autopayBlocked: 0, autopayFailed: 0 }
     const nowIso = () => new Date().toISOString()
 
@@ -151,5 +156,5 @@ export function runScheduler(today = todayISO()): Promise<SchedulerSummary> {
 
     db.meta.lastSchedulerRun = today
     return s
-  })
+  }
 }

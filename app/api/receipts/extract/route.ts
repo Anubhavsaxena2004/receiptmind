@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { apiCaller, crossSiteBlock } from '@/lib/api'
 import { CATEGORY_IDS } from '@/lib/categories'
 
 /**
@@ -32,6 +33,11 @@ const PROMPT = `Read this receipt or bill and extract the purchase.
 let client: Anthropic | null = null
 
 export async function POST(request: Request) {
+  // Scanning costs money per call, so it is for signed-in users only.
+  const caller = await apiCaller(request)
+  if (!caller) return NextResponse.json({ error: 'Log in to scan receipts.', needsAuth: 'login' }, { status: 401 })
+  const blocked = crossSiteBlock(request, caller)
+  if (blocked) return blocked
   let file: File | null
   try {
     file = (await request.formData()).get('file') as File | null

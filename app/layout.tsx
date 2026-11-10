@@ -1,11 +1,5 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { AppShell } from '@/components/app-shell'
-import { AutoScheduler } from '@/components/auto-scheduler'
-import { paypalConfigured } from '@/lib/config'
-import { getData } from '@/lib/data'
-import { storageKind } from '@/lib/db'
-import { todayISO } from '@/lib/dates'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -24,22 +18,16 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   colorScheme: 'light dark',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#f6f8fc' },
-    { media: '(prefers-color-scheme: dark)', color: '#0c111d' },
+    { media: '(prefers-color-scheme: light)', color: '#f4f7f6' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b1312' },
   ],
 }
 
-export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const db = await getData()
-  const unread = db.notifications.filter((n) => !n.read).length
-  const demoLabel = paypalConfigured() ? 'PayPal Sandbox' : 'Demo payments'
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en-IN">
       <body className="antialiased">
-        <AppShell unread={unread} demoLabel={demoLabel} storageWarning={storageKind() === 'temporary'}>
-          {children}
-        </AppShell>
-        <AutoScheduler lastRun={db.meta.lastSchedulerRun} today={todayISO()} />
+        {children}
         {/* Vercel Analytics only works when hosted on Vercel (it 404s elsewhere, e.g. Render). */}
         {process.env.VERCEL && <Analytics />}
       </body>

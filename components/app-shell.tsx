@@ -2,22 +2,31 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { startTransition, useEffect, useState } from 'react'
+import { Menu as MenuPrimitive } from '@base-ui/react/menu'
 import {
   Bell,
   CalendarClock,
+  ChevronDown,
   FlaskConical,
   History,
   House,
+  LogOut,
+  MailWarning,
   Menu,
   PiggyBank,
   ReceiptText,
   Repeat,
   Settings,
   ShieldAlert,
+  ShieldCheck,
+  Sparkles,
   Users,
   X,
 } from 'lucide-react'
+import type { ClientViewer } from '@/components/auth/auth-context'
+import { buttonVariants } from '@/components/ui/button'
+import { logoutAction } from '@/lib/actions/auth'
 import { cn } from '@/lib/utils'
 
 type Icon = React.ComponentType<{ className?: string }>
@@ -47,6 +56,13 @@ const NAV: { section?: string; items: { href: string; label: string; icon: Icon;
     section: 'Together',
     items: [{ href: '/groups', label: 'Groups', icon: Users, hint: 'Split & track who paid' }],
   },
+]
+
+const BOTTOM: { href: string; label: string; icon: Icon }[] = [
+  { href: '/', label: 'Home', icon: House },
+  { href: '/expenses', label: 'Expenses', icon: ReceiptText },
+  { href: '/bills', label: 'Bills', icon: CalendarClock },
+  { href: '/drill', label: 'Drill', icon: ShieldAlert },
 ]
 
 function isActive(pathname: string, href: string) {
@@ -92,7 +108,7 @@ function NavList({ pathname, onNavigate }: { pathname: string; onNavigate?: () =
   )
 }
 
-function Brand() {
+export function Brand() {
   return (
     <Link href="/" className="flex items-center gap-2.5">
       <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-lg font-black text-primary-foreground">T</span>
@@ -104,20 +120,95 @@ function Brand() {
   )
 }
 
+function initials(name: string) {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase())
+      .join('') || 'T'
+  )
+}
+
+function AccountMenu({ viewer }: { viewer: Extract<ClientViewer, { kind: 'user' }> }) {
+  const item = 'flex w-full cursor-default items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-muted'
+  return (
+    <MenuPrimitive.Root>
+      <MenuPrimitive.Trigger
+        aria-label={`Account: ${viewer.name}`}
+        className="flex items-center gap-2 rounded-xl border bg-card py-1 pr-2 pl-1 text-sm font-semibold hover:bg-muted"
+      >
+        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
+          {initials(viewer.name)}
+        </span>
+        <span className="hidden max-w-32 truncate md:inline">{viewer.name}</span>
+        <ChevronDown className="size-4 text-muted-foreground" aria-hidden />
+      </MenuPrimitive.Trigger>
+      <MenuPrimitive.Portal>
+        <MenuPrimitive.Positioner sideOffset={8} align="end" className="z-50">
+          <MenuPrimitive.Popup className="w-64 rounded-xl border bg-popover p-1.5 text-popover-foreground shadow-xl outline-none">
+            <div className="px-2.5 py-2">
+              <p className="truncate text-sm font-semibold">{viewer.name}</p>
+              <p className="truncate text-xs text-muted-foreground">{viewer.email}</p>
+              <p className={cn('mt-1.5 inline-flex items-center gap-1 text-xs font-medium', viewer.verified ? 'text-success' : 'text-warning')}>
+                {viewer.verified ? <ShieldCheck className="size-3.5" aria-hidden /> : <MailWarning className="size-3.5" aria-hidden />}
+                {viewer.verified ? 'Email verified' : 'Email not verified'}
+              </p>
+            </div>
+            <div className="my-1 h-px bg-border" />
+            <MenuPrimitive.LinkItem render={<Link href="/settings" />} className={item}>
+              <Settings className="size-4 text-muted-foreground" aria-hidden /> Settings
+            </MenuPrimitive.LinkItem>
+            <MenuPrimitive.LinkItem render={<Link href="/settings?tab=security" />} className={item}>
+              <ShieldCheck className="size-4 text-muted-foreground" aria-hidden /> Security
+            </MenuPrimitive.LinkItem>
+            <div className="my-1 h-px bg-border" />
+            <MenuPrimitive.Item className={item} onClick={() => startTransition(() => logoutAction())}>
+              <LogOut className="size-4 text-muted-foreground" aria-hidden /> Log out
+            </MenuPrimitive.Item>
+          </MenuPrimitive.Popup>
+        </MenuPrimitive.Positioner>
+      </MenuPrimitive.Portal>
+    </MenuPrimitive.Root>
+  )
+}
+
+function Banner({ tone, icon: Icon, children }: { tone: 'brand' | 'warning'; icon: Icon; children: React.ReactNode }) {
+  return (
+    <div
+      role="status"
+      className={cn(
+        'flex items-center justify-center gap-2 border-b px-4 py-2 text-center text-xs font-medium sm:px-8 sm:text-[13px]',
+        tone === 'brand' ? 'bg-secondary text-secondary-foreground' : 'bg-warning-soft text-warning',
+      )}
+    >
+      <Icon className="hidden size-4 shrink-0 sm:block" aria-hidden />
+      <span>{children}</span>
+    </div>
+  )
+}
+
 export function AppShell({
   children,
   unread,
   demoLabel,
+  viewer,
+  sample = false,
   storageWarning = false,
 }: {
   children: React.ReactNode
   unread: number
   demoLabel: string
+  viewer: ClientViewer
+  /** The signed-in user loaded the sample data into their account. */
+  sample?: boolean
   /** True when data can't be saved permanently on this host (e.g. Vercel without Redis). */
   storageWarning?: boolean
 }) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
+  const guest = viewer.kind === 'guest'
 
   useEffect(() => {
     if (!open) return
@@ -140,6 +231,8 @@ export function AppShell({
     </Link>
   )
 
+  const next = encodeURIComponent(pathname)
+
   return (
     <div className="min-h-dvh">
       {/* Desktop sidebar */}
@@ -153,7 +246,7 @@ export function AppShell({
         <div className="border-t pt-3">{settingsLink()}</div>
       </aside>
 
-      {/* Mobile drawer */}
+      {/* Mobile drawer ("More") */}
       {open && (
         <div className="fixed inset-0 z-50 lg:hidden" role="dialog" aria-modal="true" aria-label="Menu">
           <button aria-label="Close menu" className="absolute inset-0 bg-foreground/30" onClick={() => setOpen(false)} />
@@ -174,17 +267,14 @@ export function AppShell({
 
       <div className="lg:pl-64">
         <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur sm:px-8">
-          <button aria-label="Open menu" onClick={() => setOpen(true)} className="-ml-1 rounded-lg p-2 hover:bg-muted lg:hidden">
-            <Menu className="size-5" />
-          </button>
           <div className="lg:hidden">
             <Brand />
           </div>
           <div className="ml-auto flex items-center gap-2">
             <Link
-              href="/settings"
-              className="hidden items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground sm:inline-flex"
-              title="Payments run in demo mode. See Settings."
+              href="/settings?tab=connections"
+              className="hidden items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground hover:text-foreground md:inline-flex"
+              title="Payments run in demo mode. See Settings → Connections."
             >
               <FlaskConical className="size-3.5" aria-hidden /> {demoLabel}
             </Link>
@@ -200,18 +290,81 @@ export function AppShell({
                 </span>
               )}
             </Link>
+            {guest ? (
+              <>
+                <Link href={`/login?next=${next}`} className={cn(buttonVariants({ variant: 'ghost' }), 'hidden sm:inline-flex')}>
+                  Log in
+                </Link>
+                <Link href={`/signup?next=${next}`} className={buttonVariants()}>
+                  Sign up free
+                </Link>
+              </>
+            ) : (
+              <AccountMenu viewer={viewer} />
+            )}
           </div>
         </header>
+
+        {guest && (
+          <Banner tone="brand" icon={Sparkles}>
+            You’re exploring a sample household. Nothing here is real or saved.{' '}
+            <Link href={`/signup?next=${next}`} className="font-bold underline underline-offset-2">
+              Create a free account
+            </Link>{' '}
+            to track your own money.
+          </Banner>
+        )}
+        {viewer.kind === 'user' && !viewer.verified && (
+          <Banner tone="warning" icon={MailWarning}>
+            Verify your email to turn on payments and AutoPay.{' '}
+            <Link href={`/verify?next=${next}`} className="font-bold underline underline-offset-2">
+              Verify now
+            </Link>
+          </Banner>
+        )}
+        {viewer.kind === 'user' && sample && (
+          <Banner tone="brand" icon={Sparkles}>
+            Your account is showing sample data so you can try everything.{' '}
+            <Link href="/settings?tab=demo" className="font-bold underline underline-offset-2">
+              Clear it when you’re ready
+            </Link>
+          </Banner>
+        )}
         {storageWarning && (
-          <div role="status" className="border-b bg-warning-soft px-4 py-2 text-center text-xs font-medium text-warning sm:px-8">
-            Demo data is temporary on this deployment and may reset.{' '}
-            <Link href="/settings" className="underline underline-offset-2">
+          <Banner tone="warning" icon={FlaskConical}>
+            Data on this deployment is temporary and may reset.{' '}
+            <Link href="/settings?tab=connections" className="underline underline-offset-2">
               How to keep it
             </Link>
-          </div>
+          </Banner>
         )}
-        <main className="mx-auto max-w-5xl px-4 py-6 sm:px-8 sm:py-8">{children}</main>
+        <main className="mx-auto max-w-5xl px-4 pt-6 pb-28 sm:px-8 sm:pt-8 lg:pb-10">{children}</main>
       </div>
+
+      {/* Mobile bottom navigation */}
+      <nav
+        aria-label="Quick"
+        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden"
+      >
+        {BOTTOM.map(({ href, label, icon: Icon }) => {
+          const active = isActive(pathname, href)
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={active ? 'page' : undefined}
+              className={cn('flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold', active ? 'text-primary' : 'text-muted-foreground')}
+            >
+              <Icon className="size-5" />
+              {label}
+            </Link>
+          )
+        })}
+        <button onClick={() => setOpen(true)} className="flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold text-muted-foreground">
+          <Menu className="size-5" />
+          More
+        </button>
+      </nav>
     </div>
   )
 }

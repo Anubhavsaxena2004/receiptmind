@@ -1,54 +1,55 @@
 import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { discardOutbox, flushOutbox, outboxMark } from './notify'
-import { createSeed } from './seed'
-import type { Db } from './types'
 
 /**
- * The whole app state is one JSON document. Where it lives:
+ * A tiny document store. Each document is one JSON value under a key:
+ * `accounts` (users and sessions) and `user:<id>` (one person's money data).
  *
+ * Where documents live:
  * - **Upstash Redis** when UPSTASH_REDIS_REST_URL/TOKEN (or Vercel's KV_REST_API_URL/TOKEN)
  *   are set. Use this on Vercel or any serverless host. Saves are conflict-checked,
  *   so two requests at the same moment can't overwrite each other.
- * - **A file** (`data/db.json`, or TINKU_DATA_DIR) for local dev and servers with a disk.
- * - **Temporary file in /tmp** on Vercel without Redis: the app works, but data can reset
- *   and separate server instances don't share changes. Settings shows a warning.
- *
- * The rest of the app only calls readDb() / updateDb().
+ * - **Files** (`data/`, or TINKU_DATA_DIR) for local dev and servers with a disk.
+ * - **Temporary files in /tmp** on Vercel without Redis: the app works, but data can reset
+ *   and separate server instances don't share changes. The app shows a warning.
  */
 
 export type StorageKind = 'redis' | 'file' | 'temporary'
 
 interface Snapshot {
-  db: Db | null
+  doc: unknown
   /** Revision the snapshot was read at; used for conflict-checked saves. */
   rev: string
 }
 
 interface Store {
   kind: StorageKind
-  load(): Promise<Snapshot>
+  load(key: string): Promise<Snapshot>
   /** Saves only if nobody saved since `rev` was read. Returns false on a conflict. */
-  save(db: Db, rev: string): Promise<boolean>
+  save(key: string, doc: unknown, rev: string): Promise<boolean>
+  remove(key: string): Promise<void>
 }
 
+const safeName = (key: string) => key.replace(/[^a-z0-9_-]/gi, '-')
+
 function fileStore(dir: string, kind: StorageKind): Store {
-  const file = path.join(dir, 'db.json')
+  const fileFor = (key: string) => path.join(dir, `${safeName(key)}.json`)
   return {
     kind,
-    async load() {
+    async load(key) {
       try {
-        return { db: JSON.parse(await fs.readFile(file, 'utf8')) as Db, rev: '0' }
+        return { doc: JSON.parse(await fs.readFile(fileFor(key), 'utf8')), rev: '0' }
       } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { db: null, rev: '0' }
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { doc: null, rev: '0' }
         throw err
       }
     },
-    async save(db) {
+    async save(key, doc) {
       await fs.mkdir(dir, { recursive: true })
-      const json = JSON.stringify(db, null, 2)
-      const tmp = `${file}.${process.pid}.tmp`
+      const file = fileFor(key)
+      const json = JSON.stringify(doc, null, 2)
+      const tmp = `${file}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`
       await fs.writeFile(tmp, json, 'utf8')
       try {
         await fs.rename(tmp, file)
@@ -58,6 +59,9 @@ function fileStore(dir: string, kind: StorageKind): Store {
         await fs.rm(tmp, { force: true })
       }
       return true
+    },
+    async remove(key) {
+      await fs.rm(fileFor(key), { force: true })
     },
   }
 }
@@ -71,8 +75,9 @@ redis.call('SET', KEYS[2], ARGV[3])
 return 1`
 
 function redisStore(url: string, token: string): Store {
-  const DOC = process.env.TINKU_REDIS_KEY ?? 'tinku:db'
-  const REV = `${DOC}:rev`
+  const prefix = process.env.TINKU_REDIS_PREFIX || 'tinku'
+  const docKey = (key: string) => `${prefix}:${key}`
+  const revKey = (key: string) => `${prefix}:${key}:rev`
   async function call(command: string[]): Promise<unknown> {
     const res = await fetch(url.replace(/\/$/, ''), {
       method: 'POST',
@@ -87,13 +92,18 @@ function redisStore(url: string, token: string): Store {
   }
   return {
     kind: 'redis',
-    async load() {
-      const [doc, rev] = (await call(['MGET', DOC, REV])) as [string | null, string | null]
-      return { db: doc ? (JSON.parse(doc) as Db) : null, rev: rev ?? '0' }
+    async load(key) {
+      const [doc, rev] = (await call(['MGET', docKey(key), revKey(key)])) as [string | null, string | null]
+      return { doc: doc ? JSON.parse(doc) : null, rev: rev ?? '0' }
     },
-    async save(db, rev) {
-      const ok = await call(['EVAL', SAVE_SCRIPT, '2', DOC, REV, JSON.stringify(db), rev, String(Number(rev) + 1)])
+    async save(key, doc, rev) {
+      const ok = await call(['EVAL', SAVE_SCRIPT, '2', docKey(key), revKey(key), JSON.stringify(doc), rev, String(Number(rev) + 1)])
       return Number(ok) === 1
+    },
+    async remove(key) {
+      // Bump the revision instead of deleting it, so a save that read the old document can't resurrect it.
+      await call(['DEL', docKey(key)])
+      await call(['INCR', revKey(key)])
     },
   }
 }
@@ -122,66 +132,59 @@ export function storageKind(): StorageKind {
   return getStore().kind
 }
 
-// Serialises writes inside one server instance; Redis revisions handle the rest.
-let queue: Promise<unknown> = Promise.resolve()
+// Serialises writes to the same document inside one server instance; Redis revisions handle the rest.
+const queues = new Map<string, Promise<unknown>>()
 
-function enqueue<T>(task: () => Promise<T>): Promise<T> {
-  const run = queue.then(task, task)
-  queue = run.catch(() => undefined)
+function enqueue<T>(key: string, task: () => Promise<T>): Promise<T> {
+  const prev = queues.get(key) ?? Promise.resolve()
+  const run = prev.then(task, task)
+  const tail = run.catch(() => undefined)
+  queues.set(key, tail)
+  void tail.then(() => {
+    if (queues.get(key) === tail) queues.delete(key)
+  })
   return run
 }
 
-export async function readDb(): Promise<Db> {
-  const s = getStore()
-  const snap = await s.load()
-  if (snap.db) return snap.db
-  return enqueue(async () => {
-    const again = await s.load()
-    if (again.db) return again.db
-    const seeded = createSeed()
-    if (await s.save(seeded, again.rev)) return seeded
-    return (await s.load()).db ?? seeded
-  })
+export async function readDoc<T>(key: string): Promise<T | null> {
+  return (await getStore().load(key)).doc as T | null
 }
 
 /**
- * Apply a synchronous change and save it. The callback must not do network
- * calls — do those before/after so the store is never locked while waiting.
+ * Apply a synchronous change to a document and save it. The callback must not do
+ * network calls — do those before/after so a document is never locked while waiting.
  * If another request saved first, the change is re-applied to the fresh data.
+ * `onSaved` runs once, after the save that stuck.
  */
-export function updateDb<T>(fn: (db: Db) => T): Promise<T> {
-  return enqueue(async () => {
+export function updateDoc<T, R>(key: string, init: () => T, fn: (doc: T) => R, onSaved?: (doc: T) => void): Promise<R> {
+  return enqueue(key, async () => {
     const s = getStore()
     for (let attempt = 0; attempt < 10; attempt++) {
       // After a clash, wait a short random time so competing instances stop colliding.
       if (attempt > 0) await new Promise((r) => setTimeout(r, Math.random() * 40 * attempt))
-      const snap = await s.load()
-      const db = snap.db ?? createSeed()
-      const mark = outboxMark()
-      let result: T
-      try {
-        result = fn(db)
-      } catch (err) {
-        discardOutbox(mark)
-        throw err
-      }
-      if (await s.save(db, snap.rev)) {
-        flushOutbox()
+      const snap = await s.load(key)
+      const doc = (snap.doc as T | null) ?? init()
+      const result = fn(doc)
+      if (await s.save(key, doc, snap.rev)) {
+        onSaved?.(doc)
         return result
       }
-      discardOutbox(mark)
     }
     throw new Error('Your change clashed with another update. Please try again.')
   })
 }
 
-export function resetDb(): Promise<void> {
-  return enqueue(async () => {
-    discardOutbox(0)
+/** Replace a document entirely (conflict-checked, retried). */
+export function writeDoc<T>(key: string, make: () => T): Promise<void> {
+  return enqueue(key, async () => {
     const s = getStore()
     for (let attempt = 0; attempt < 5; attempt++) {
-      if (await s.save(createSeed(), (await s.load()).rev)) return
+      if (await s.save(key, make(), (await s.load(key)).rev)) return
     }
-    throw new Error('Could not reset the demo data. Please try again.')
+    throw new Error('Could not save. Please try again.')
   })
+}
+
+export function deleteDoc(key: string): Promise<void> {
+  return enqueue(key, () => getStore().remove(key))
 }

@@ -16,9 +16,44 @@ import type {
   PaymentMode,
 } from './types'
 
-/** Demo data, dated relative to today so the demo always has something due. */
-export function createSeed(today = todayISO()): Db {
+/** A brand-new account: no sample records, the person sets their own numbers. */
+export function createEmptyDb(name = 'there'): Db {
   const now = new Date().toISOString()
+  return {
+    version: 1,
+    meta: { createdAt: now },
+    profile: {
+      name,
+      monthlyIncome: 0,
+      salaryDay: 1,
+      currentBalance: 0,
+      balanceUpdatedAt: now,
+      emergencyReserve: 0,
+      demoFailNextCharge: false,
+    },
+    expenses: [],
+    budgets: [],
+    bills: [],
+    occurrences: [],
+    mandates: [],
+    payments: [],
+    notifications: [],
+    groups: [],
+    groupExpenses: [],
+    settlements: [],
+    drills: [],
+    processedWebhookIds: [],
+  }
+}
+
+/**
+ * Sample household, dated relative to today so there is always something due.
+ * Used read-only for guests, and copied into an account only when its owner
+ * explicitly asks for sample data (`forAccount`).
+ */
+export function createSeed(today = todayISO(), opts: { name?: string; forAccount?: boolean } = {}): Db {
+  const now = new Date().toISOString()
+  const name = opts.name ?? 'Riya'
   // Fixed IDs: every server instance that seeds gets the same IDs, so links stay valid
   // even when a host (e.g. Vercel without a database) seeds separately per instance.
   let seq = 0
@@ -27,9 +62,9 @@ export function createSeed(today = todayISO()): Db {
 
   const db: Db = {
     version: 1,
-    meta: { createdAt: now },
+    meta: { createdAt: now, sample: opts.forAccount || undefined },
     profile: {
-      name: 'Riya',
+      name,
       monthlyIncome: 65000,
       salaryDay: 1,
       currentBalance: 38500,
@@ -212,11 +247,29 @@ export function createSeed(today = todayISO()): Db {
     const date = addDays(today, -daysAgo)
     db.expenses.push({ id: sid('exp'), title, amount, category: cat, date, source, createdAt: at(date, 18) })
   }
+  // Five earlier months of everyday spending, so the spending trend has a history.
+  const earlier: [string, number, CategoryId][] = [
+    ['Supermarket groceries', 2400, 'groceries'],
+    ['Vegetable market', 900, 'groceries'],
+    ['Eating out', 1700, 'food'],
+    ['Metro & cabs', 1900, 'transport'],
+    ['Pharmacy', 700, 'health'],
+    ['Online shopping', 2100, 'shopping'],
+    ['Movies & outings', 900, 'entertainment'],
+  ]
+  const wobble = [1.08, 0.92, 1.15, 0.97, 1.04]
+  for (let m = 1; m <= 5; m++) {
+    earlier.forEach(([title, amount, cat], i) => {
+      const date = addDays(addMonths(today, -m), -((i * 4) % 25))
+      const value = Math.round((amount * wobble[(m + i) % 5]) / 10) * 10
+      db.expenses.push({ id: sid('exp'), title, amount: value, category: cat, date, source: i % 3 === 0 ? 'receipt' : 'manual', createdAt: at(date, 18) })
+    })
+  }
   db.expenses.sort((a, b) => b.date.localeCompare(a.date))
   db.payments.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 
   // A flat-share group
-  const you: GroupMember = { id: 'mem_you', name: 'Riya', isYou: true }
+  const you: GroupMember = { id: 'mem_you', name, isYou: true }
   const kabir: GroupMember = { id: sid('mem'), name: 'Kabir' }
   const meera: GroupMember = { id: sid('mem'), name: 'Meera' }
   const groupId = sid('grp')
@@ -243,9 +296,11 @@ export function createSeed(today = todayISO()): Db {
       id: sid('ntf'),
       at: now,
       kind: 'system',
-      title: 'Welcome to Tinku',
-      body: 'This is demo data. Set your own income and balance in Settings, or reset the demo anytime.',
-      href: '/settings',
+      title: opts.forAccount ? 'Sample data loaded' : 'Welcome to Tinku',
+      body: opts.forAccount
+        ? 'Your account now shows example bills and expenses so you can try every feature. Clear them in Settings → Demo tools.'
+        : 'This is a sample household. Create a free account to track your own money.',
+      href: opts.forAccount ? '/settings?tab=demo' : '/signup',
       read: false,
     },
   )

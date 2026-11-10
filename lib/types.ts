@@ -24,6 +24,8 @@ export interface Profile {
   emergencyReserve: number
   /** Demo switch: the next simulated charge fails, to show failure handling. */
   demoFailNextCharge: boolean
+  /** When the user first saved their own income/balance (drives the first-run checklist). */
+  setupAt?: string
 }
 
 export interface Expense {
@@ -102,6 +104,8 @@ export interface Mandate {
   authorizedAt: string
   expiresOn: string
   provider: 'simulated'
+  /** What the user agreed to, when, and as whom. AutoPay always needs this explicit consent. */
+  consent?: { at: string; by: string; text: string }
 }
 
 export type PaymentStatus = 'created' | 'pending' | 'captured' | 'failed' | 'cancelled' | 'refunded'
@@ -193,9 +197,24 @@ export interface DrillRecord {
   planSteps: string[]
 }
 
+export interface ZapierDelivery {
+  at: string
+  title: string
+  ok: boolean
+  detail: string
+}
+
+/** The user's own Zapier "Catch Hook". Only set after they agree to what gets sent. */
+export interface ZapierSettings {
+  url: string
+  consentAt: string
+  log: ZapierDelivery[]
+}
+
 export interface Db {
   version: 1
-  meta: { createdAt: string; lastSchedulerRun?: string }
+  /** sample = the user chose "Load sample data", so the account shows example records. */
+  meta: { createdAt: string; lastSchedulerRun?: string; sample?: boolean }
   profile: Profile
   expenses: Expense[]
   budgets: Budget[]
@@ -209,6 +228,7 @@ export interface Db {
   settlements: Settlement[]
   drills: DrillRecord[]
   processedWebhookIds: string[]
+  integrations?: { zapier?: ZapierSettings }
 }
 
 /** Returned by server actions used with useActionState. */
@@ -216,4 +236,8 @@ export interface ActionState {
   error?: string
   message?: string
   duplicateOf?: { title: string; amount: number; date: string }
+  /** The action needs a signed-in (or verified) user. The UI offers to log in / verify. */
+  needsAuth?: 'login' | 'verify'
+  /** Auth actions used inside the login popup report success instead of redirecting. */
+  ok?: boolean
 }

@@ -16,10 +16,6 @@ export function paypalWebhookConfigured(): boolean {
   return paypalConfigured() && Boolean(process.env.PAYPAL_WEBHOOK_ID)
 }
 
-export function zapierConfigured(): boolean {
-  return Boolean(process.env.ZAPIER_WEBHOOK_URL)
-}
-
 export function receiptScanConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN)
 }

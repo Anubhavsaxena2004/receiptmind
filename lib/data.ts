@@ -1,15 +1,22 @@
+import { cache } from 'react'
 import { connection } from 'next/server'
 import { headers } from 'next/headers'
-import { readDb } from './db'
+import { sampleDb } from './demo'
+import { currentUser } from './session'
+import { readUserDb } from './store'
 import type { Db } from './types'
 
-/** Load the store for a page. connection() keeps the page dynamic (never prerendered with stale data). */
-export async function getData(): Promise<Db> {
+/**
+ * Data for the page being rendered: the signed-in user's own data, or the
+ * read-only sample household for guests. connection() keeps pages dynamic.
+ */
+export const getData = cache(async (): Promise<Db> => {
   await connection()
-  return readDb()
-}
+  const user = await currentUser()
+  return user ? readUserDb(user.id) : sampleDb()
+})
 
-/** Public origin for PayPal return URLs. APP_URL wins (set it in production). */
+/** Public origin for PayPal/Google return URLs. APP_URL wins (set it in production). */
 export async function getOrigin(): Promise<string> {
   if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, '')
   const h = await headers()

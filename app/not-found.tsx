@@ -5,7 +5,7 @@ import { buttonVariants } from '@/components/ui/button'
 
 export default function NotFound() {
   return (
-    <div className="py-10">
+    <div className="mx-auto max-w-lg px-4 py-16">
       <EmptyState
         icon={SearchX}
         title="We couldn’t find that"
