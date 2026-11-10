@@ -12,7 +12,7 @@ import { logoutAction } from '@/lib/actions/auth'
 import { eraseMyData, loadSampleData, setDemoFailure } from '@/lib/actions/misc'
 import { emailConfigured } from '@/lib/auth/email'
 import { googleConfigured } from '@/lib/auth/google'
-import { paypalConfigured, paypalWebhookConfigured, receiptScanConfigured } from '@/lib/config'
+import { paypalConfigured, paypalWebhookConfigured, receiptScanConfigured, receiptScanProvider } from '@/lib/config'
 import { getData } from '@/lib/data'
 import { storageKind } from '@/lib/db'
 import { formatDateTime } from '@/lib/format'
@@ -236,9 +236,27 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   }
                 />
                 <StatusRow
-                  name="Receipt scanning (Claude)"
+                  name={
+                    receiptScanProvider() === 'gemini'
+                      ? 'Receipt scanning (Google Gemini - Free)'
+                      : receiptScanProvider() === 'openai'
+                        ? 'Receipt scanning (OpenAI GPT-4o-mini)'
+                        : receiptScanProvider() === 'anthropic'
+                          ? 'Receipt scanning (Claude)'
+                          : 'Receipt scanning (AI OCR)'
+                  }
                   on={receiptScanConfigured()}
-                  text={receiptScanConfigured() ? 'Photos of receipts are read automatically. You always check before saving.' : 'Set ANTHROPIC_API_KEY. Manual entry always works.'}
+                  text={
+                    receiptScanConfigured()
+                      ? `Active via ${
+                          receiptScanProvider() === 'gemini'
+                            ? 'Google Gemini 1.5 Flash (100% Free)'
+                            : receiptScanProvider() === 'openai'
+                              ? 'OpenAI GPT-4o-mini'
+                              : 'Anthropic Claude'
+                        }. Photos of receipts are scanned automatically.`
+                      : 'Not set up. Add GEMINI_API_KEY (Free at aistudio.google.com), OPENAI_API_KEY, or ANTHROPIC_API_KEY. Manual entry always works.'
+                  }
                 />
                 <StatusRow
                   name="Email (verification & password reset)"

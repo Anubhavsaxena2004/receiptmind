@@ -106,6 +106,64 @@ async function extractWithGemini(apiKey: string, base64Data: string, mimeType: s
   return parsed.success ? parsed.data : null
 }
 
+async function extractWithOpenAI(apiKey: string, base64Data: string, mimeType: string): Promise<ReceiptData | null> {
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini'
+  const endpoint = 'https://api.openai.com/v1/chat/completions'
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      response_format: { type: 'json_object' },
+      temperature: 0.1,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `${PROMPT}\nReturn ONLY JSON matching this schema:
+{
+  "is_receipt": boolean,
+  "merchant": string,
+  "total_amount": number,
+  "currency": string,
+  "date": string,
+  "category": "${CATEGORY_IDS.join('" | "')}",
+  "confidence": "high" | "medium" | "low",
+  "note": string
+}`,
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:${mimeType};base64,${base64Data}`,
+              },
+            },
+          ],
+        },
+      ],
+    }),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    console.error('[receipts] OpenAI API error:', res.status, errText)
+    throw new Error(`OpenAI API error (${res.status})`)
+  }
+
+  const json = await res.json()
+  const text = json.choices?.[0]?.message?.content
+  if (!text) return null
+
+  const parsed = ReceiptSchema.safeParse(JSON.parse(text))
+  return parsed.success ? parsed.data : null
+}
+
 export async function POST(request: Request) {
   // Scanning costs money per call, so it is for signed-in users only.
   const caller = await apiCaller(request)
@@ -149,9 +207,26 @@ export async function POST(request: Request) {
     }
   }
 
+  const openaiKey = process.env.OPENAI_API_KEY?.trim()
+  if (openaiKey) {
+    try {
+      const receipt = await extractWithOpenAI(openaiKey, data, file.type)
+      if (!receipt) {
+        return NextResponse.json({ error: 'Could not parse the receipt details. Enter details by hand.' }, { status: 422 })
+      }
+      if (!receipt.is_receipt) {
+        return NextResponse.json({ error: 'That doesn’t look like a receipt or bill.' }, { status: 422 })
+      }
+      return NextResponse.json({ receipt })
+    } catch (err) {
+      console.error('[receipts] OpenAI error', err)
+      return NextResponse.json({ error: 'OpenAI scan error. Please enter details by hand.' }, { status: 502 })
+    }
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
   if (!apiKey) {
-    return NextResponse.json({ error: 'Receipt scanning isn’t set up (add GEMINI_API_KEY or ANTHROPIC_API_KEY in .env). Enter details by hand.' }, { status: 503 })
+    return NextResponse.json({ error: 'Receipt scanning isn’t set up. Add GEMINI_API_KEY (free), OPENAI_API_KEY, or ANTHROPIC_API_KEY in environment variables.' }, { status: 503 })
   }
 
   try {

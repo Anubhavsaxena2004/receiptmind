@@ -19,7 +19,15 @@ export function paypalWebhookConfigured(): boolean {
 export function receiptScanConfigured(): boolean {
   return Boolean(
     process.env.GEMINI_API_KEY ||
+    process.env.OPENAI_API_KEY ||
     process.env.ANTHROPIC_API_KEY ||
     process.env.ANTHROPIC_AUTH_TOKEN
   )
+}
+
+export function receiptScanProvider(): 'gemini' | 'openai' | 'anthropic' | null {
+  if (process.env.GEMINI_API_KEY) return 'gemini'
+  if (process.env.OPENAI_API_KEY) return 'openai'
+  if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) return 'anthropic'
+  return null
 }
