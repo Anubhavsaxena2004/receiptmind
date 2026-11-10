@@ -14,6 +14,7 @@ import {
   CreditCard,
   Eye,
   Film,
+  Gift,
   Info,
   MoreHorizontal,
   PiggyBank,
@@ -22,10 +23,12 @@ import {
   ShieldAlert,
   ShieldCheck,
   ShoppingBag,
+  Sparkles,
   TrendingUp,
   Utensils,
   Wallet,
   X,
+  Zap,
 } from 'lucide-react'
 import { ActionButton } from '@/components/action-button'
 import { Notice } from '@/components/bits'
@@ -36,11 +39,13 @@ import { buttonVariants } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { skipOccurrence } from '@/lib/actions/bills'
 import { loadSampleData } from '@/lib/actions/misc'
+import { executeWishlistPurchase } from '@/lib/actions/wishlist'
+import { evaluateAgenticCommerce } from '@/lib/agentic-commerce'
 import { billViews, needsAction } from '@/lib/bills'
 import { CATEGORIES, category } from '@/lib/categories'
 import { getData } from '@/lib/data'
 import { monthKey, shiftMonthKey, todayISO } from '@/lib/dates'
-import { dueLabel, formatDate, formatDateLong, formatDateTime, formatINR } from '@/lib/format'
+import { dueLabel, formatDate, formatDateLong, formatDateTime, formatINR, formatUSD } from '@/lib/format'
 import { getViewer } from '@/lib/session'
 import { cn } from '@/lib/utils'
 
@@ -63,6 +68,9 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const inMonthExpenses = db.expenses.filter((e) => monthKey(e.date) === month)
   const spent = inMonthExpenses.reduce((s, e) => s + e.amount, 0)
   const everydayBudget = db.budgets.filter((b) => category(b.category).kind === 'spending').reduce((s, b) => s + b.limit, 0)
+
+  const commerce = evaluateAgenticCommerce(db, today)
+  const topWishlist = commerce.topRecommendation
   const totalBudget = db.budgets.reduce((s, b) => s + b.limit, 0)
 
   // Top spending categories breakdown
@@ -190,6 +198,12 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
             className="rounded-full px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground transition shrink-0"
           >
             Budgets
+          </Link>
+          <Link
+            href="/wishlist"
+            className="rounded-full px-3.5 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground transition shrink-0"
+          >
+            Wishlist
           </Link>
           <Link
             href="/drill"
@@ -401,6 +415,95 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           </div>
         </div>
       </div>
+
+      {/* ──────────────────────────────────────────────────────────────────────────
+          AGENTIC COMMERCE & WISHLIST CO-PILOT
+          Translates budget discipline into safe, guilt-free reward purchases
+          guaranteed not to touch emergency reserves or upcoming 14-day obligations.
+          ────────────────────────────────────────────────────────────────────────── */}
+      {topWishlist && (
+        <Card
+          className={cn(
+            'relative overflow-hidden rounded-3xl border p-5 sm:p-6 shadow-sm transition-all',
+            topWishlist.unlocked
+              ? 'border-emerald-500/40 bg-gradient-to-br from-emerald-500/10 via-card to-card dark:border-emerald-500/30'
+              : 'border-border bg-card',
+          )}
+        >
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex-1 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold',
+                    topWishlist.unlocked
+                      ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-primary/15 text-primary',
+                  )}
+                >
+                  {topWishlist.unlocked ? <Sparkles className="size-3.5 fill-current" /> : <Gift className="size-3.5" />}
+                  {topWishlist.unlocked ? 'AI Surplus Match: Goal Unlocked!' : 'Agentic Commerce: Goal in Progress'}
+                </span>
+                <span className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground">
+                  <ShieldCheck className="size-3 text-success" /> Reserve & 14-day bills safe
+                </span>
+              </div>
+              <h2 className="flex items-center gap-2 text-lg font-bold tracking-tight text-foreground sm:text-xl">
+                {topWishlist.item.title}
+                <span className="text-sm font-semibold text-muted-foreground">({formatINR(topWishlist.item.price)})</span>
+              </h2>
+              <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
+                {topWishlist.reason}
+              </p>
+
+              {!topWishlist.unlocked && (
+                <div className="mt-2 flex max-w-md items-center gap-3">
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${topWishlist.coveragePct}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-bold tabular-nums text-foreground">{topWishlist.coveragePct}%</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+              {topWishlist.unlocked ? (
+                <ActionButton
+                  action={executeWishlistPurchase}
+                  fields={{ id: topWishlist.item.id }}
+                  variant="default"
+                  size="default"
+                  confirm={{
+                    title: `Buy “${topWishlist.item.title}”?`,
+                    body: `This will charge ${formatINR(topWishlist.item.price)} (${formatUSD(topWishlist.item.price / 85)} USD) via PayPal Sandbox. Your emergency reserve remains untouched.`,
+                    confirmLabel: 'Confirm PayPal Sandbox Purchase',
+                    tone: 'default',
+                  }}
+                  className="flex items-center gap-2 rounded-full bg-[#0070BA] px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-500/25 hover:bg-[#003087]"
+                >
+                  <Zap className="size-3.5 fill-current" /> Pay with PayPal
+                </ActionButton>
+              ) : (
+                <Link
+                  href="/wishlist"
+                  className={cn(buttonVariants({ size: 'sm', variant: 'outline' }), 'rounded-full text-xs font-bold')}
+                >
+                  Track in AG Grid
+                </Link>
+              )}
+              <Link
+                href="/wishlist"
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold text-muted-foreground transition hover:text-foreground"
+              >
+                Wishlist Grid <ArrowRight className="size-3" />
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* ──────────────────────────────────────────────────────────────────────────
           BENTO ROW 2: 3-COLUMN SIBURIAN BENTO SYSTEM

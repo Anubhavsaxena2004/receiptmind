@@ -211,6 +211,22 @@ export interface ZapierSettings {
   log: ZapierDelivery[]
 }
 
+export type WishlistPriority = 'high' | 'medium' | 'low'
+
+export interface WishlistItem {
+  id: string
+  title: string
+  price: number
+  priority: WishlistPriority
+  category?: CategoryId
+  url?: string
+  note?: string
+  purchased: boolean
+  purchasedAt?: string
+  paymentId?: string
+  createdAt: string
+}
+
 export interface Db {
   version: 1
   /** sample = the user chose "Load sample data", so the account shows example records. */
@@ -229,6 +245,7 @@ export interface Db {
   drills: DrillRecord[]
   processedWebhookIds: string[]
   integrations?: { zapier?: ZapierSettings }
+  wishlist?: WishlistItem[]
 }
 
 /** Returned by server actions used with useActionState. */

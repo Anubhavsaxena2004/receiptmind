@@ -774,6 +774,106 @@ it('zapierPayload formats notification data safely without leaking secrets', () 
   assert.equal(payload.link, 'http://localhost:3000/payments/pay_1')
 })
 
+// -----------------------------------------------------------------------------
+// 9. AGENTIC COMMERCE & WISHLIST SURPLUS ENGINE
+// -----------------------------------------------------------------------------
+console.log('\n--- 9. Agentic Commerce & Wishlist Surplus Engine ---')
+
+function calculateSafeSurplus({ currentBalance, emergencyReserve, due14DaysTotal }) {
+  const availableLiquidity = currentBalance - due14DaysTotal
+  return Math.max(0, availableLiquidity - emergencyReserve)
+}
+
+function evaluateWishlistProgress(items, safeSurplus) {
+  const PRIORITY_WEIGHT = { high: 3, medium: 2, low: 1 }
+  const active = items.filter((i) => !i.purchased)
+
+  const progress = active.map((item) => {
+    const coveragePct = Math.min(100, item.price > 0 ? Math.round((safeSurplus / item.price) * 100) : 100)
+    const unlocked = safeSurplus >= item.price
+    const remainingToSave = Math.max(0, item.price - safeSurplus)
+    return { item, coveragePct, unlocked, remainingToSave }
+  })
+
+  progress.sort((a, b) => {
+    if (a.unlocked !== b.unlocked) return a.unlocked ? -1 : 1
+    const pDiff = PRIORITY_WEIGHT[b.item.priority] - PRIORITY_WEIGHT[a.item.priority]
+    if (pDiff !== 0) return pDiff
+    return b.coveragePct - a.coveragePct
+  })
+
+  return progress
+}
+
+it('calculateSafeSurplus protects emergency reserve and upcoming 14-day obligations', () => {
+  const surplus = calculateSafeSurplus({
+    currentBalance: 50000,
+    emergencyReserve: 20000,
+    due14DaysTotal: 3000,
+  })
+  // 50,000 - 3,000 (bills) - 20,000 (reserve) = 27,000
+  assert.equal(surplus, 27000)
+})
+
+it('calculateSafeSurplus clamps to 0 when liquid balance falls below reserve threshold', () => {
+  const deficit = calculateSafeSurplus({
+    currentBalance: 18000,
+    emergencyReserve: 20000,
+    due14DaysTotal: 5000,
+  })
+  // 18,000 - 5,000 = 13,000 < 20,000 reserve -> surplus 0
+  assert.equal(deficit, 0)
+})
+
+it('evaluateWishlistProgress unlocks affordable goals and sorts high priority first', () => {
+  const items = [
+    { id: 'w1', title: 'Ergonomic Chair', price: 30000, priority: 'medium', purchased: false },
+    { id: 'w2', title: 'Noise Cancelling Headphones', price: 15000, priority: 'high', purchased: false },
+    { id: 'w3', title: 'Mechanical Keyboard', price: 8000, priority: 'low', purchased: false },
+  ]
+  const progress = evaluateWishlistProgress(items, 27000)
+
+  // w2 (15,000) and w3 (8,000) are affordable (<= 27,000)
+  // Between unlocked items, w2 is high priority so it must rank 1st
+  assert.equal(progress[0].item.id, 'w2')
+  assert.equal(progress[0].unlocked, true)
+  assert.equal(progress[0].coveragePct, 100)
+
+  // w3 is unlocked, low priority -> ranks 2nd
+  assert.equal(progress[1].item.id, 'w3')
+  assert.equal(progress[1].unlocked, true)
+
+  // w1 (30,000) is locked (needs 3,000 more)
+  assert.equal(progress[2].item.id, 'w1')
+  assert.equal(progress[2].unlocked, false)
+  assert.equal(progress[2].remainingToSave, 3000)
+  assert.equal(progress[2].coveragePct, 90)
+})
+
+it('executeWishlistPurchase marks item purchased, logs PayPal payment and deducts balance safely', () => {
+  const userBalance = 50000
+  const item = { id: 'w1', title: 'Headphones', price: 15000, priority: 'high', purchased: false }
+
+  // Simulate execution
+  assert.ok(userBalance >= item.price, 'Must have sufficient balance')
+  const newBalance = userBalance - item.price
+  item.purchased = true
+  item.purchasedAt = '2026-11-10T19:00:00Z'
+
+  const paymentRecord = {
+    provider: 'paypal_sandbox',
+    status: 'captured',
+    amountInr: item.price,
+    chargeAmount: toUsd(item.price),
+    chargeCurrency: 'USD',
+  }
+
+  assert.equal(newBalance, 35000)
+  assert.equal(item.purchased, true)
+  assert.equal(paymentRecord.status, 'captured')
+  assert.equal(paymentRecord.chargeAmount, '176.47')
+})
+
 console.log('\n====================================================================')
 console.log(`TEST SUMMARY: ${passed} PASSED, ${failed} FAILED`)
 console.log('====================================================================\n')

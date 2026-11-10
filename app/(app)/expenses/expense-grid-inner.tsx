@@ -202,3 +202,4 @@ export default function ExpenseGridInner({ rows }: { rows: Expense[] }) {
     </div>
   )
 }
+

@@ -50,6 +50,62 @@ const TOOLS: Anthropic.Tool[] = [
 
 let client: Anthropic | null = null
 
+async function extractWithGemini(apiKey: string, base64Data: string, mimeType: string): Promise<ReceiptData | null> {
+  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash'
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+
+  const payload = {
+    contents: [
+      {
+        parts: [
+          {
+            inline_data: {
+              mime_type: mimeType,
+              data: base64Data,
+            },
+          },
+          {
+            text: `${PROMPT}\nReturn ONLY valid JSON matching this schema:
+{
+  "is_receipt": boolean,
+  "merchant": string,
+  "total_amount": number,
+  "currency": string,
+  "date": string,
+  "category": "${CATEGORY_IDS.join('" | "')}",
+  "confidence": "high" | "medium" | "low",
+  "note": string
+}`,
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      response_mime_type: 'application/json',
+      temperature: 0.1,
+    },
+  }
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    console.error('[receipts] Gemini API error:', res.status, errText)
+    throw new Error(`Gemini API error (${res.status})`)
+  }
+
+  const json = await res.json()
+  const text = json.candidates?.[0]?.content?.parts?.[0]?.text
+  if (!text) return null
+
+  const parsed = ReceiptSchema.safeParse(JSON.parse(text))
+  return parsed.success ? parsed.data : null
+}
+
 export async function POST(request: Request) {
   // Scanning costs money per call, so it is for signed-in users only.
   const caller = await apiCaller(request)
@@ -76,9 +132,26 @@ export async function POST(request: Request) {
     ? ({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } } as unknown as Anthropic.Messages.ContentBlockParam)
     : { type: 'image', source: { type: 'base64', media_type: file.type as ImageType, data } }
 
+  const geminiKey = process.env.GEMINI_API_KEY?.trim()
+  if (geminiKey) {
+    try {
+      const receipt = await extractWithGemini(geminiKey, data, file.type)
+      if (!receipt) {
+        return NextResponse.json({ error: 'Could not parse the receipt details. Enter details by hand.' }, { status: 422 })
+      }
+      if (!receipt.is_receipt) {
+        return NextResponse.json({ error: 'That doesn’t look like a receipt or bill.' }, { status: 422 })
+      }
+      return NextResponse.json({ receipt })
+    } catch (err) {
+      console.error('[receipts] Gemini error', err)
+      return NextResponse.json({ error: 'Gemini scan error. Please enter details by hand.' }, { status: 502 })
+    }
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN
   if (!apiKey) {
-    return NextResponse.json({ error: 'Receipt scanning isn’t set up (add ANTHROPIC_API_KEY in .env). Enter the details by hand.' }, { status: 503 })
+    return NextResponse.json({ error: 'Receipt scanning isn’t set up (add GEMINI_API_KEY or ANTHROPIC_API_KEY in .env). Enter details by hand.' }, { status: 503 })
   }
 
   try {

@@ -43,6 +43,7 @@ export function createEmptyDb(name = 'there'): Db {
     settlements: [],
     drills: [],
     processedWebhookIds: [],
+    wishlist: [],
   }
 }
 
@@ -84,6 +85,7 @@ export function createSeed(today = todayISO(), opts: { name?: string; forAccount
     settlements: [],
     drills: [],
     processedWebhookIds: [],
+    wishlist: [],
   }
 
   const budgets: [CategoryId, number][] = [
@@ -304,6 +306,39 @@ export function createSeed(today = todayISO(), opts: { name?: string; forAccount
       read: false,
     },
   )
+
+  db.wishlist = [
+    {
+      id: sid('wsh'),
+      title: 'Sony WH-CH720N Noise-Cancelling Headphones',
+      price: 7990,
+      priority: 'high',
+      category: 'shopping',
+      note: 'Target reward for maintaining surplus across dining & entertainment budgets.',
+      purchased: false,
+      createdAt: at(addDays(today, -10)),
+    },
+    {
+      id: sid('wsh'),
+      title: 'Ergonomic Memory Foam Lumbar Cushion',
+      price: 2490,
+      priority: 'medium',
+      category: 'health',
+      note: 'Home office posture support.',
+      purchased: false,
+      createdAt: at(addDays(today, -20)),
+    },
+    {
+      id: sid('wsh'),
+      title: 'Keychron Wireless Mechanical Keyboard',
+      price: 8499,
+      priority: 'low',
+      category: 'shopping',
+      note: 'Unlock after emergency fund covers 3 full months.',
+      purchased: false,
+      createdAt: at(addDays(today, -30)),
+    },
+  ]
 
   return db
 }

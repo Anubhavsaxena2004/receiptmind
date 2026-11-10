@@ -10,6 +10,7 @@ import {
   CalendarClock,
   ChevronDown,
   FlaskConical,
+  Gift,
   History,
   House,
   Info,
@@ -54,7 +55,10 @@ const NAV: { section?: string; items: { href: string; label: string; icon: Icon;
   },
   {
     section: 'Plan ahead',
-    items: [{ href: '/drill', label: 'Crisis drill', icon: ShieldAlert, hint: 'Simulate emergency' }],
+    items: [
+      { href: '/wishlist', label: 'Wishlist & Goals', icon: Gift, hint: 'Agentic commerce goals' },
+      { href: '/drill', label: 'Crisis drill', icon: ShieldAlert, hint: 'Simulate emergency' },
+    ],
   },
   {
     section: 'Together',
