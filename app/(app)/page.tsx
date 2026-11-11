@@ -96,16 +96,23 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const monthlyIncome = p.monthlyIncome || entered
   const netMonthly = Math.max(0, monthlyIncome - spent)
 
-  // Spending trend history
+  // Spending trend history (all monthly expenses, with day-to-day vs bill split)
   const trend: TrendPoint[] = Array.from({ length: 6 }, (_, i) => {
     const key = shiftMonthKey(month, i - 5)
+    const monthExpenses = db.expenses.filter((e) => monthKey(e.date) === key)
+    const total = monthExpenses.reduce((s, e) => s + e.amount, 0)
+    const dayToDay = monthExpenses.filter((e) => e.source !== 'bill').reduce((s, e) => s + e.amount, 0)
+    const bills = total - dayToDay
     return {
       month: key,
       label: shortMonth(key),
-      total: db.expenses.filter((e) => e.source !== 'bill' && monthKey(e.date) === key).reduce((s, e) => s + e.amount, 0),
+      total,
+      dayToDay,
+      bills,
     }
   })
   const hasTrend = trend.some((t) => t.total > 0)
+  const currentMonthTrend = trend[trend.length - 1]
 
   // Recent 5 transactions (expenses + payments combined)
   const recentTransactions = [
@@ -174,7 +181,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </div>
 
         {/* Siburian-Style Pill Navigation Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+        <div data-tour="overview-tabs" className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
           <Link
             href="/"
             className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-primary-foreground shadow-xs shrink-0"
@@ -289,7 +296,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           ────────────────────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         {/* Left Bento: Active Balance Card */}
-        <Card className="lg:col-span-7 flex flex-col justify-between p-6 sm:p-7 border-border bg-card shadow-sm rounded-3xl relative overflow-hidden">
+        <Card data-tour="active-balance" className="lg:col-span-7 flex flex-col justify-between p-6 sm:p-7 border-border bg-card shadow-sm rounded-3xl relative overflow-hidden">
           <div>
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
@@ -356,7 +363,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </Card>
 
         {/* Right Bento: Vibrant Orange Card (#F25A0C / #FB7507) */}
-        <div className="lg:col-span-5 flex flex-col justify-between rounded-3xl bg-primary p-6 sm:p-7 text-primary-foreground shadow-sm relative overflow-hidden">
+        <div data-tour="reserve-card" className="lg:col-span-5 flex flex-col justify-between rounded-3xl bg-primary p-6 sm:p-7 text-primary-foreground shadow-sm relative overflow-hidden">
           <div>
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-black/85 px-3 py-1 text-xs font-extrabold tracking-wider uppercase text-primary">
@@ -513,7 +520,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           ────────────────────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
         {/* Bento Box 1: Spending (Circular Donut & Category List) */}
-        <Card className="flex flex-col justify-between p-6 border-border bg-card shadow-xs rounded-3xl">
+        <Card data-tour="spending-donut" className="flex flex-col justify-between p-6 border-border bg-card shadow-xs rounded-3xl">
           <div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -724,7 +731,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </Card>
 
         {/* Bento Box 3: Combined Activity, Actions & Transactions Card (Image 2 style) */}
-        <Card className="flex flex-col justify-between p-6 border-border bg-card shadow-xs rounded-3xl">
+        <Card data-tour="transactions-actions" className="flex flex-col justify-between p-6 border-border bg-card shadow-xs rounded-3xl">
           <div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -879,7 +886,11 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
           <div>
             <h2 className="text-base font-bold text-foreground">Monthly Spending Trend</h2>
-            <p className="text-xs text-muted-foreground">6-month day-to-day spending pattern (bills separate)</p>
+            <p className="text-xs text-muted-foreground">
+              {currentMonthTrend && (currentMonthTrend.bills ?? 0) > 0
+                ? `6-month total spending (${formatINR(currentMonthTrend.dayToDay ?? 0)} day-to-day · ${formatINR(currentMonthTrend.bills ?? 0)} bills this month)`
+                : '6-month total monthly spending pattern'}
+            </p>
           </div>
           <Link href="/expenses" className="text-xs font-bold text-primary hover:underline self-start sm:self-auto">
             View expense details →
@@ -888,7 +899,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
         <div>
           {hasTrend ? (
-            <SpendingTrend points={trend} budget={everydayBudget} />
+            <SpendingTrend points={trend} budget={totalBudget || everydayBudget} dayToDayBudget={everydayBudget} />
           ) : (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Your trend chart will populate as you record day-to-day expenses.

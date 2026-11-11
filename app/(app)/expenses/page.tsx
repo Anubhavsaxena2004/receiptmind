@@ -115,7 +115,7 @@ export default async function ExpensesPage({
             </p>
 
             {/* View Mode Toggle: List vs AG Grid */}
-            <div className="inline-flex items-center rounded-full border border-border bg-muted/60 p-1 shadow-2xs">
+            <div data-tour="expense-view-toggle" className="inline-flex items-center rounded-full border border-border bg-muted/60 p-1 shadow-2xs">
               <Link
                 href={keep({ view: 'list' })}
                 aria-label="List view"
@@ -153,7 +153,7 @@ export default async function ExpensesPage({
       ) : (
         <>
           {/* Filter / Search Form */}
-          <form method="get" action="/expenses" role="search" className="flex flex-col gap-2 sm:flex-row">
+          <form method="get" action="/expenses" role="search" data-tour="expense-search-form" className="flex flex-col gap-2 sm:flex-row">
             <input type="hidden" name="month" value={month} />
             <input type="hidden" name="view" value={viewMode} />
             <label className="relative flex-1">
@@ -161,7 +161,7 @@ export default async function ExpensesPage({
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
               <Input name="q" defaultValue={q} placeholder="Search by description or note" className="pl-9 h-11" />
             </label>
-            <label className="sm:w-56">
+            <label data-tour="expense-category-select" className="sm:w-56">
               <span className="sr-only">Category</span>
               <Select name="cat" defaultValue={cat} className="h-11">
                 <option value="">All categories</option>
@@ -186,7 +186,7 @@ export default async function ExpensesPage({
 
           {/* Category Quick Chips */}
           {top.length > 0 && (
-            <div className="flex flex-wrap gap-2">
+            <div data-tour="expense-category-chips" className="flex flex-wrap gap-2">
               {top.map(([c, amt]) => (
                 <Link
                   key={c}

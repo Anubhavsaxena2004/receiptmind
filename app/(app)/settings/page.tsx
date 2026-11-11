@@ -4,6 +4,7 @@ import { CircleCheck, CircleDashed, Database, Eraser, KeyRound, LogIn, MailWarni
 import { ChangePasswordForm, DeleteAccountForm, ZapierConnect, ZapierConnected } from './account-forms'
 import { ProfileForm } from './profile-form'
 import { AppearanceSettings } from '@/components/appearance-settings'
+import { TourSettingsCard } from '@/components/tour/tour-settings-card'
 import { ActionButton } from '@/components/action-button'
 import { PageHeader } from '@/components/page-header'
 import { buttonVariants } from '@/components/ui/button'
@@ -119,15 +120,19 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
         ))}
 
       {tab === 'appearance' && (
-        <Card className="p-6 border-border bg-card shadow-xs">
-          <CardHeader
-            title="Theme & Interface Appearance"
-            description="Customize how Tinku looks on your device. Choose between our high-contrast light theme, deep dark mode, or match your system automatically."
-          />
-          <div className="mt-4">
-            <AppearanceSettings />
-          </div>
-        </Card>
+        <div className="space-y-5">
+          <Card className="p-6 border-border bg-card shadow-xs">
+            <CardHeader
+              title="Theme & Interface Appearance"
+              description="Customize how Tinku looks on your device. Choose between our high-contrast light theme, deep dark mode, or match your system automatically."
+            />
+            <div className="mt-4">
+              <AppearanceSettings />
+            </div>
+          </Card>
+
+          <TourSettingsCard />
+        </div>
       )}
 
       {tab === 'security' &&

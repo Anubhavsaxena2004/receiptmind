@@ -150,7 +150,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
           )}
 
           {/* Dual Category Columns: Essential & Flexible */}
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div data-tour="budget-columns" className="grid gap-6 lg:grid-cols-2">
             {/* Essential Card */}
             <Card className="p-5 shadow-sm border-border bg-card">
               <div className="border-b border-border pb-4">

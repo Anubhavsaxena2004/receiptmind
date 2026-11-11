@@ -1,6 +1,7 @@
 import { AppShell } from '@/components/app-shell'
 import { AuthProvider, type ClientViewer } from '@/components/auth/auth-context'
 import { AutoScheduler } from '@/components/auto-scheduler'
+import { TourProvider } from '@/components/tour/tour-provider'
 import { googleConfigured } from '@/lib/auth/google'
 import { paypalConfigured } from '@/lib/config'
 import { getData } from '@/lib/data'
@@ -18,16 +19,18 @@ export default async function AppLayout({ children }: Readonly<{ children: React
       : { kind: 'guest' }
   return (
     <AuthProvider viewer={client} google={googleConfigured()}>
-      <AppShell
-        unread={unread}
-        demoLabel={demoLabel}
-        viewer={client}
-        sample={viewer.kind === 'user' && Boolean(db.meta.sample)}
-        storageWarning={storageKind() === 'temporary'}
-      >
-        {children}
-      </AppShell>
-      {viewer.kind === 'user' && <AutoScheduler lastRun={db.meta.lastSchedulerRun} today={todayISO()} />}
+      <TourProvider>
+        <AppShell
+          unread={unread}
+          demoLabel={demoLabel}
+          viewer={client}
+          sample={viewer.kind === 'user' && Boolean(db.meta.sample)}
+          storageWarning={storageKind() === 'temporary'}
+        >
+          {children}
+        </AppShell>
+        {viewer.kind === 'user' && <AutoScheduler lastRun={db.meta.lastSchedulerRun} today={todayISO()} />}
+      </TourProvider>
     </AuthProvider>
   )
 }

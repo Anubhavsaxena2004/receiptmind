@@ -11,6 +11,7 @@ import {
   ChevronDown,
   FlaskConical,
   Gift,
+  HelpCircle,
   History,
   House,
   Info,
@@ -197,6 +198,12 @@ function AccountMenu({ viewer }: { viewer: Extract<ClientViewer, { kind: 'user' 
             <MenuPrimitive.LinkItem render={<Link href="/settings?tab=security" />} className={item}>
               <ShieldCheck className="size-4 text-muted-foreground" aria-hidden="true" /> Security
             </MenuPrimitive.LinkItem>
+            <MenuPrimitive.LinkItem render={<Link href="/help" />} className={item}>
+              <HelpCircle className="size-4 text-muted-foreground" aria-hidden="true" /> Help & Guided Tours
+            </MenuPrimitive.LinkItem>
+            <MenuPrimitive.LinkItem render={<Link href="/about" />} className={item}>
+              <Info className="size-4 text-muted-foreground" aria-hidden="true" /> About Tinku
+            </MenuPrimitive.LinkItem>
             <div className="my-1 h-px bg-border/60" />
             <MenuPrimitive.Item className={cn(item, 'text-danger hover:bg-danger-soft')} onClick={() => startTransition(() => logoutAction())}>
               <LogOut className="size-4 text-danger" aria-hidden="true" /> Log out
@@ -295,6 +302,7 @@ export function AppShell({
         <div className="px-1 pt-5">
           <Link
             href="/expenses/new"
+            data-tour="quick-add"
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-2.5 text-sm font-bold text-primary-foreground shadow-sm shadow-primary/25 transition-all hover:bg-primary/95 active:scale-[0.99]"
           >
             <Plus className="size-4 stroke-[2.5]" /> Quick Add
@@ -302,7 +310,7 @@ export function AppShell({
         </div>
 
         {/* Nav List */}
-        <div className="mt-6 flex-1 overflow-y-auto">
+        <div data-tour="sidebar-nav" className="mt-6 flex-1 overflow-y-auto">
           <NavList pathname={pathname} />
         </div>
 
@@ -320,8 +328,35 @@ export function AppShell({
           <p className="text-[11px] text-muted-foreground mt-0.5">Test financial resilience</p>
         </div>
 
-        {/* Settings Footer */}
-        <div className="border-t border-border/50 pt-3">{settingsLink()}</div>
+        {/* Help, About & Settings Footer */}
+        <div className="space-y-1 border-t border-border/50 pt-3">
+          <Link
+            href="/help"
+            data-tour="sidebar-help"
+            aria-current={isActive(pathname, '/help') ? 'page' : undefined}
+            className={cn(
+              'flex items-center gap-3 rounded-2xl px-3.5 py-2 text-sm font-semibold transition-all',
+              isActive(pathname, '/help')
+                ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+            )}
+          >
+            <HelpCircle className={cn('size-[18px]', isActive(pathname, '/help') ? 'text-primary-foreground' : 'text-muted-foreground')} /> Help & Tours
+          </Link>
+          <Link
+            href="/about"
+            aria-current={isActive(pathname, '/about') ? 'page' : undefined}
+            className={cn(
+              'flex items-center gap-3 rounded-2xl px-3.5 py-2 text-sm font-semibold transition-all',
+              isActive(pathname, '/about')
+                ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+            )}
+          >
+            <Info className={cn('size-[18px]', isActive(pathname, '/about') ? 'text-primary-foreground' : 'text-muted-foreground')} /> About Tinku
+          </Link>
+          {settingsLink()}
+        </div>
       </aside>
 
       {/* ──────────────────────────────────────────────────────────────────────────
@@ -340,7 +375,35 @@ export function AppShell({
             <div className="mt-6 flex-1 overflow-y-auto">
               <NavList pathname={pathname} onNavigate={() => setOpen(false)} />
             </div>
-            <div className="border-t border-border/50 pt-3">{settingsLink(() => setOpen(false))}</div>
+            <div className="space-y-1 border-t border-border/50 pt-3">
+              <Link
+                href="/help"
+                onClick={() => setOpen(false)}
+                aria-current={isActive(pathname, '/help') ? 'page' : undefined}
+                className={cn(
+                  'flex items-center gap-3 rounded-2xl px-3.5 py-2 text-sm font-semibold transition-all',
+                  isActive(pathname, '/help')
+                    ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                    : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                )}
+              >
+                <HelpCircle className={cn('size-[18px]', isActive(pathname, '/help') ? 'text-primary-foreground' : 'text-muted-foreground')} /> Help & Tours
+              </Link>
+              <Link
+                href="/about"
+                onClick={() => setOpen(false)}
+                aria-current={isActive(pathname, '/about') ? 'page' : undefined}
+                className={cn(
+                  'flex items-center gap-3 rounded-2xl px-3.5 py-2 text-sm font-semibold transition-all',
+                  isActive(pathname, '/about')
+                    ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                    : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                )}
+              >
+                <Info className={cn('size-[18px]', isActive(pathname, '/about') ? 'text-primary-foreground' : 'text-muted-foreground')} /> About Tinku
+              </Link>
+              {settingsLink(() => setOpen(false))}
+            </div>
           </div>
         </div>
       )}
@@ -358,6 +421,7 @@ export function AppShell({
           {/* Desktop Search / Quick Jump Placeholder (Axiom style) */}
           <Link
             href="/expenses"
+            data-tour="header-search"
             className="hidden items-center gap-2 rounded-full border border-border/70 bg-card px-3.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors md:flex shadow-2xs"
           >
             <Search className="size-3.5" />
@@ -377,10 +441,13 @@ export function AppShell({
               <FlaskConical className="size-3.5 text-primary" aria-hidden="true" /> {demoLabel}
             </Link>
 
-            <ThemeToggle className="hidden md:flex" />
+            <div data-tour="header-theme" className="hidden md:flex">
+              <ThemeToggle />
+            </div>
 
             <Link
               href="/notifications"
+              data-tour="header-notifications"
               aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
               className="relative flex size-10 items-center justify-center rounded-full border border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-muted/50 transition shadow-2xs"
             >
@@ -392,18 +459,20 @@ export function AppShell({
               )}
             </Link>
 
-            {guest ? (
-              <>
-                <Link href={`/login?next=${next}`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'hidden sm:inline-flex rounded-full')}>
-                  Log in
-                </Link>
-                <Link href={`/signup?next=${next}`} className={cn(buttonVariants({ size: 'sm', variant: 'default' }), 'rounded-full font-bold px-4')}>
-                  Sign up
-                </Link>
-              </>
-            ) : (
-              <AccountMenu viewer={viewer} />
-            )}
+            <div data-tour="header-account" className="flex items-center gap-2">
+              {guest ? (
+                <>
+                  <Link href={`/login?next=${next}`} className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'hidden sm:inline-flex rounded-full')}>
+                    Log in
+                  </Link>
+                  <Link href={`/signup?next=${next}`} className={cn(buttonVariants({ size: 'sm', variant: 'default' }), 'rounded-full font-bold px-4')}>
+                    Sign up
+                  </Link>
+                </>
+              ) : (
+                <AccountMenu viewer={viewer} />
+              )}
+            </div>
           </div>
         </header>
 
@@ -454,6 +523,7 @@ export function AppShell({
       {/* Floating Action Button on mobile */}
       <Link
         href="/expenses/new"
+        data-tour="mobile-quick-add"
         aria-label="Add expense"
         className="fixed right-4 bottom-20 z-40 flex size-12 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/35 transition-transform active:scale-95 lg:hidden"
       >
@@ -463,6 +533,7 @@ export function AppShell({
       {/* Mobile bottom navigation */}
       <nav
         aria-label="Quick"
+        data-tour="mobile-bottom-nav"
         className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border/80 bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-lg lg:hidden"
       >
         {BOTTOM.map(({ href, label, icon: Icon }) => {
@@ -483,6 +554,7 @@ export function AppShell({
           )
         })}
         <button
+          data-tour="mobile-more"
           onClick={() => setOpen(true)}
           className="flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
         >
