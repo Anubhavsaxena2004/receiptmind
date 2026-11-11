@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { ActionButton } from '@/components/action-button'
 import { Notice } from '@/components/bits'
+import { DashboardMonthSelect } from '@/components/dashboard-month-select'
 import { OccurrenceActions } from '@/components/occurrence-actions'
 import { SpendingTrend, type TrendPoint } from '@/components/spending-trend'
 import { ModeBadge, OccurrenceBadge } from '@/components/status'
@@ -50,13 +51,27 @@ import { getViewer } from '@/lib/session'
 import { cn } from '@/lib/utils'
 
 const shortMonth = (key: string) => new Date(`${key}-01T00:00:00`).toLocaleString('en-IN', { month: 'short' })
+const CATEGORY_DOTS = ['bg-primary', 'bg-muted-foreground/60', 'bg-muted-foreground/40', 'bg-muted-foreground/30']
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const [db, viewer, sp] = await Promise.all([getData(), getViewer(), searchParams])
   const guest = viewer.kind === 'guest'
   const today = todayISO()
   const month = monthKey(today)
-  const currentMonthName = new Date().toLocaleString('en-IN', { month: 'long' })
+  const selectedMonth = sp.month && /^\d{4}-\d{2}$/.test(sp.month) && sp.month <= month ? sp.month : month
+  const formatMonthLabel = (key: string) =>
+    new Date(`${key}-01T00:00:00`).toLocaleString('en-IN', {
+      month: 'long',
+      ...(key.slice(0, 4) !== month.slice(0, 4) ? { year: 'numeric' } : {}),
+    })
+  const selectedMonthLabel = formatMonthLabel(selectedMonth)
+  const monthOptionKeys = Array.from(
+    new Set([
+      ...Array.from({ length: 6 }, (_, i) => shiftMonthKey(month, -i)),
+      ...db.expenses.map((e) => monthKey(e.date)).filter((k) => k <= month),
+    ]),
+  ).sort((a, b) => b.localeCompare(a))
+  const monthOptions = monthOptionKeys.map((key) => ({ value: key, label: formatMonthLabel(key) }))
   const p = db.profile
 
   const views = billViews(db, today)
@@ -67,15 +82,17 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   const inMonthExpenses = db.expenses.filter((e) => monthKey(e.date) === month)
   const spent = inMonthExpenses.reduce((s, e) => s + e.amount, 0)
+  const spendingExpenses = selectedMonth === month ? inMonthExpenses : db.expenses.filter((e) => monthKey(e.date) === selectedMonth)
+  const spendingTotal = spendingExpenses.reduce((s, e) => s + e.amount, 0)
   const everydayBudget = db.budgets.filter((b) => category(b.category).kind === 'spending').reduce((s, b) => s + b.limit, 0)
 
   const commerce = evaluateAgenticCommerce(db, today)
   const topWishlist = commerce.topRecommendation
   const totalBudget = db.budgets.reduce((s, b) => s + b.limit, 0)
 
-  // Top spending categories breakdown
+  // Top spending categories breakdown for selected month
   const catTotals = new Map<string, number>()
-  for (const e of inMonthExpenses) {
+  for (const e of spendingExpenses) {
     catTotals.set(e.category, (catTotals.get(e.category) ?? 0) + e.amount)
   }
   const topCategories = [...catTotals.entries()]
@@ -85,7 +102,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       id: c,
       label: category(c as never).label,
       amount: amt,
-      pct: spent > 0 ? Math.round((amt / spent) * 100) : 0,
+      pct: spendingTotal > 0 ? Math.round((amt / spendingTotal) * 100) : 0,
     }))
 
   // "Money available" calculation
@@ -140,13 +157,17 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   const lastDrill = db.drills[0]
 
-  // Donut metrics for the spending circle (Image 2 Siburian style)
-  const budgetRatio = everydayBudget > 0 ? Math.min(100, Math.round((spent / everydayBudget) * 100)) : 45
+  // Donut metrics for the spending circle
+  const activeBudget = totalBudget > 0 ? totalBudget : everydayBudget
+  const spendingReference = activeBudget > 0 ? activeBudget : monthlyIncome
+  const budgetRatio = spendingReference > 0 ? Math.round((spendingTotal / spendingReference) * 100) : 0
+  const donutPct = Math.min(100, Math.max(0, budgetRatio))
   const circumference = 2 * Math.PI * 45 // radius = 45 -> 282.74
-  const strokeDashoffset = circumference - (circumference * budgetRatio) / 100
+  const strokeDashoffset = circumference - (circumference * donutPct) / 100
 
   // Income allocation percentages
   const salaryProgress = Math.min(100, Math.round((spent / (monthlyIncome || 1)) * 100))
+  const remainingPct = monthlyIncome > 0 ? Math.max(0, Math.min(100, Math.round((netMonthly / monthlyIncome) * 100))) : 0
 
   // First-run checklist for empty accounts
   const steps = [
@@ -529,12 +550,14 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
                 </span>
                 <h2 className="font-bold text-base text-foreground">Spending</h2>
               </div>
-              <span className="rounded-full border border-border/70 bg-card px-2.5 py-1 text-xs font-semibold text-muted-foreground capitalize flex items-center gap-1 shadow-2xs">
-                {currentMonthName} ▾
-              </span>
+              <DashboardMonthSelect
+                selectedMonth={selectedMonth}
+                currentMonth={month}
+                options={monthOptions}
+              />
             </div>
 
-            {/* Circular Progress Donut Meter (Exact Siburian Donut) */}
+            {/* Circular Progress Donut Meter */}
             <div className="mt-6 flex flex-col items-center justify-center">
               <div className="relative flex size-36 items-center justify-center">
                 <svg className="size-full -rotate-90" viewBox="0 0 100 100">
@@ -565,10 +588,14 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
                 {/* Amount inside donut */}
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                   <span className="text-xl font-black tracking-tight tabular-nums text-foreground">
-                    {formatINR(spent)}
+                    {formatINR(spendingTotal)}
                   </span>
                   <span className="text-[11px] font-bold text-primary mt-0.5">
-                    {budgetRatio}% used
+                    {activeBudget > 0
+                      ? `${budgetRatio}% used`
+                      : monthlyIncome > 0
+                        ? `${budgetRatio}% of income`
+                        : 'No limit set'}
                   </span>
                 </div>
               </div>
@@ -576,49 +603,42 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               {/* Status summary */}
               <div className="mt-4 inline-flex items-center rounded-full bg-muted/60 px-3 py-1 text-[11px] font-medium text-muted-foreground">
                 <span>
-                  {everydayBudget > 0
-                    ? `${formatINR(Math.max(0, everydayBudget - spent))} left of ${formatINR(everydayBudget)} budget`
-                    : 'Tracked against monthly income'}
+                  {activeBudget > 0
+                    ? spendingTotal > activeBudget
+                      ? `${formatINR(spendingTotal - activeBudget)} over ${formatINR(activeBudget)} budget`
+                      : `${formatINR(activeBudget - spendingTotal)} left of ${formatINR(activeBudget)} budget`
+                    : monthlyIncome > 0
+                      ? spendingTotal > monthlyIncome
+                        ? `${formatINR(spendingTotal - monthlyIncome)} above ${formatINR(monthlyIncome)} income`
+                        : `${formatINR(monthlyIncome - spendingTotal)} left of ${formatINR(monthlyIncome)} income`
+                      : 'Add a budget or monthly income in Settings'}
                 </span>
               </div>
             </div>
 
-            {/* 2x2 Category Breakdown Grid (Siburian 4-item grid) */}
-            <div className="mt-6 grid grid-cols-2 gap-3 border-t border-border/60 pt-4">
-              <div className="flex items-center gap-2 text-xs">
-                <span className="size-2 rounded-full bg-primary shrink-0" />
-                <span className="text-muted-foreground truncate">{topCategories[0]?.label ?? 'Rent'}</span>
-                <span className="ml-auto font-bold text-foreground tabular-nums">
-                  {formatINR(topCategories[0]?.amount ?? 12000)}
-                </span>
+            {/* Category Breakdown Grid (real data only) */}
+            {topCategories.length === 0 ? (
+              <p className="mt-6 border-t border-border/60 pt-4 text-center text-xs text-muted-foreground">
+                No expenses recorded in {selectedMonthLabel}.
+              </p>
+            ) : (
+              <div className="mt-6 grid grid-cols-2 gap-3 border-t border-border/60 pt-4">
+                {topCategories.map((cat, idx) => (
+                  <div key={cat.id} className="flex items-center gap-2 text-xs min-w-0">
+                    <span className={cn('size-2 rounded-full shrink-0', CATEGORY_DOTS[idx % CATEGORY_DOTS.length])} />
+                    <span className="text-muted-foreground truncate">{cat.label}</span>
+                    <span className="ml-auto font-bold text-foreground tabular-nums shrink-0">
+                      {formatINR(cat.amount)}
+                    </span>
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="size-2 rounded-full bg-muted-foreground/60 shrink-0" />
-                <span className="text-muted-foreground truncate">{topCategories[1]?.label ?? 'Transport'}</span>
-                <span className="ml-auto font-bold text-foreground tabular-nums">
-                  {formatINR(topCategories[1]?.amount ?? 3200)}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="size-2 rounded-full bg-muted-foreground/40 shrink-0" />
-                <span className="text-muted-foreground truncate">{topCategories[2]?.label ?? 'Food'}</span>
-                <span className="ml-auto font-bold text-foreground tabular-nums">
-                  {formatINR(topCategories[2]?.amount ?? 4500)}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="size-2 rounded-full bg-muted-foreground/30 shrink-0" />
-                <span className="text-muted-foreground truncate">{topCategories[3]?.label ?? 'Bills'}</span>
-                <span className="ml-auto font-bold text-foreground tabular-nums">
-                  {formatINR(topCategories[3]?.amount ?? 2800)}
-                </span>
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="mt-5 pt-3 border-t border-border/50">
             <Link
-              href="/expenses"
+              href={selectedMonth === month ? '/expenses' : `/expenses?month=${selectedMonth}`}
               className="flex items-center justify-between text-xs font-bold text-primary hover:underline"
             >
               <span>View spending breakdown</span>
@@ -652,25 +672,25 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               </p>
             </div>
 
-            {/* Breakdown Progress Bars (Image 2 Salary/Investment style with 51% pill) */}
+            {/* Breakdown Progress Bars */}
             <div className="mt-6 space-y-4">
-              {/* Salary / Inflow bar with 51% pill indicator on bar */}
+              {/* Salary / Inflow bar showing live remaining income share */}
               <div>
                 <div className="flex items-center justify-between text-xs mb-1.5">
-                  <span className="font-semibold text-foreground">Salary</span>
+                  <span className="font-semibold text-foreground">Salary remaining</span>
                   <span className="font-bold tabular-nums text-foreground">{formatINR(monthlyIncome)}</span>
                 </div>
                 <div className="relative h-2 w-full rounded-full bg-muted overflow-visible flex items-center">
                   <div
                     className="h-full rounded-full bg-primary transition-all duration-500"
-                    style={{ width: '51%' }}
+                    style={{ width: `${remainingPct}%` }}
                   />
-                  {/* Floating 51% Dark Pill at bar tip (Exact Siburian Detail!) */}
                   <span
                     className="absolute -top-2 flex items-center justify-center rounded-full bg-foreground px-1.5 py-0.5 text-[9px] font-black text-background shadow-xs -translate-x-1/2"
-                    style={{ left: '51%' }}
+                    style={{ left: `${Math.max(8, Math.min(92, remainingPct))}%` }}
+                    title={`${remainingPct}% of monthly income unspent`}
                   >
-                    51%
+                    {remainingPct}%
                   </span>
                 </div>
               </div>
@@ -850,10 +870,10 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
                       <span
                         className={cn(
                           'font-bold text-xs tabular-nums shrink-0',
-                          idx === 0 ? 'text-success' : 'text-danger',
+                          tx.isCredit ? 'text-success' : 'text-danger',
                         )}
                       >
-                        {idx === 0 ? `+${formatINR(tx.amount)}` : `-${formatINR(tx.amount)}`}
+                        {tx.isCredit ? `+${formatINR(tx.amount)}` : `-${formatINR(tx.amount)}`}
                       </span>
                     </div>
                   ))

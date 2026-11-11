@@ -255,7 +255,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                     receiptScanConfigured()
                       ? `Active via ${
                           receiptScanProvider() === 'gemini'
-                            ? 'Google Gemini 1.5 Flash (100% Free)'
+                            ? `Google Gemini (${process.env.GEMINI_MODEL || 'gemini-flash-latest'} · Free)`
                             : receiptScanProvider() === 'openai'
                               ? 'OpenAI GPT-4o-mini'
                               : 'Anthropic Claude'

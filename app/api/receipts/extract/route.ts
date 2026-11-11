@@ -51,8 +51,8 @@ const TOOLS: Anthropic.Tool[] = [
 let client: Anthropic | null = null
 
 async function extractWithGemini(apiKey: string, base64Data: string, mimeType: string): Promise<ReceiptData | null> {
-  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash'
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
+  const model = process.env.GEMINI_MODEL || 'gemini-flash-latest'
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`
 
   const payload = {
     contents: [
@@ -99,10 +99,11 @@ async function extractWithGemini(apiKey: string, base64Data: string, mimeType: s
   }
 
   const json = await res.json()
-  const text = json.candidates?.[0]?.content?.parts?.[0]?.text
-  if (!text) return null
+  const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text
+  if (!rawText || typeof rawText !== 'string') return null
 
-  const parsed = ReceiptSchema.safeParse(JSON.parse(text))
+  const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
+  const parsed = ReceiptSchema.safeParse(JSON.parse(cleaned))
   return parsed.success ? parsed.data : null
 }
 
