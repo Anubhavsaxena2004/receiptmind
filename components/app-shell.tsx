@@ -441,7 +441,7 @@ export function AppShell({
               <FlaskConical className="size-3.5 text-primary" aria-hidden="true" /> {demoLabel}
             </Link>
 
-            <div data-tour="header-theme" className="hidden md:flex">
+            <div data-tour="header-theme" className="flex">
               <ThemeToggle />
             </div>
 
