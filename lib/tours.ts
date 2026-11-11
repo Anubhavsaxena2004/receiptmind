@@ -1,6 +1,16 @@
 import { CATEGORIES } from './categories'
 
-export type TourId = 'welcome' | 'navigation' | 'category-discovery'
+export type TourId =
+  | 'home'
+  | 'expenses'
+  | 'budgets'
+  | 'bills'
+  | 'autopay'
+  | 'history'
+  | 'wishlist'
+  | 'drill'
+  | 'groups'
+  | 'category-discovery'
 
 export type TourPlacement = 'top' | 'bottom' | 'left' | 'right' | 'center'
 
@@ -17,9 +27,12 @@ export interface TourStep {
 
 export interface TourTrack {
   id: TourId
+  route: string
   title: string
   subtitle: string
   estimatedTime: string
+  nextTourId?: TourId
+  nextLabel?: string
   steps: TourStep[]
 }
 
@@ -30,244 +43,406 @@ const billCount = CATEGORIES.filter((c) => c.kind === 'bill').length
 const spendingCount = CATEGORIES.filter((c) => c.kind === 'spending').length
 
 export const TOURS: Record<TourId, TourTrack> = {
-  welcome: {
-    id: 'welcome',
-    title: 'Welcome to Tinku',
-    subtitle: 'A quick tour of your balance, bills, spending categories, and emergency readiness.',
+  home: {
+    id: 'home',
+    route: '/',
+    title: 'Home Dashboard Tour',
+    subtitle: 'Understand your balance, emergency reserve, spending pace, approvals, and monthly trend.',
     estimatedTime: '2 min',
+    nextTourId: 'expenses',
+    nextLabel: 'Next: Expenses',
     steps: [
       {
-        id: 'welcome-balance',
+        id: 'home-balance',
         route: '/',
         selector: '[data-tour="active-balance"]',
         placement: 'bottom',
-        title: 'Active Balance at a Glance',
+        title: 'Active Balance & Free Cash',
         description:
-          'See how much cash you currently have, when your next salary arrives, and what remains after this week’s scheduled bills.',
-        tip: 'Use the Record Expense and Add Bill shortcuts here to update your numbers immediately.',
+          'Shows your cash balance right now, your salary day, and what stays safe to spend after this week’s bills.',
+        tip: 'Use Record Expense or Add Bill right here for quick daily updates.',
       },
       {
-        id: 'welcome-reserve',
+        id: 'home-reserve',
         route: '/',
         selector: '[data-tour="reserve-card"]',
         placement: 'left',
         title: 'Emergency Reserve & Health Score',
         description:
-          'Keep an emergency buffer separate from everyday cash. Run a Crisis Drill anytime to check how many days your household can cover.',
+          'Tracks your protected safety fund separately from everyday spending, along with your latest Crisis Drill score and active bills.',
       },
       {
-        id: 'welcome-spending',
+        id: 'home-spending',
         route: '/',
         selector: '[data-tour="spending-donut"]',
         placement: 'top',
         title: 'Monthly Spending by Category',
-        description: `Track day-to-day spending against your monthly budget across ${totalCategories} built-in categories and spot your top 4 expenses fast.`,
+        description: `Summarizes this month’s spending against your budget and surfaces your top 4 categories out of ${totalCategories} built-in buckets.`,
       },
       {
-        id: 'welcome-transactions',
+        id: 'home-earning',
+        route: '/',
+        selector: '[data-tour="earning-card"]',
+        placement: 'top',
+        title: 'Income vs Obligations Pace',
+        description:
+          'Compares expected monthly inflow against due-this-week bills, current spending, and remaining monthly buffer.',
+      },
+      {
+        id: 'home-transactions',
         route: '/',
         selector: '[data-tour="transactions-actions"]',
         placement: 'left',
-        title: 'Approvals & Recent Activity',
+        title: 'Pending Confirmations & Activity',
         description:
-          'Bills waiting for confirmation appear right at the top so you can approve or skip them without digging through menus.',
+          'Bills needing your approval appear right at the top so you can approve or skip with one tap, above your latest activity.',
       },
       {
-        id: 'welcome-quick-add',
+        id: 'home-trend',
         route: '/',
-        selector: '[data-tour="quick-add"]',
-        mobileSelector: '[data-tour="mobile-quick-add"]',
-        placement: 'right',
-        title: 'Quick Add Expense',
+        selector: '[data-tour="spending-trend"]',
+        placement: 'top',
+        title: '6-Month Spending Trend',
         description:
-          'Log a payment in seconds or upload a receipt photo from anywhere in the app using Quick Add.',
+          'Compare your last 6 months at a glance and switch between All expenses and Excl. bills whenever you want.',
       },
       {
-        id: 'welcome-sidebar',
+        id: 'home-nav',
         route: '/',
         selector: '[data-tour="sidebar-nav"]',
         mobileSelector: '[data-tour="mobile-bottom-nav"]',
         placement: 'right',
-        title: 'Organized Around Your Money Routine',
+        title: 'App Navigation & Progressive Guides',
         description:
-          'Navigate cleanly between Track (Expenses & Budgets), Pay (Bills, AutoPay & History), Plan ahead (Wishlist & Crisis Drill), and Together (Groups).',
-      },
-      {
-        id: 'welcome-expenses',
-        route: '/expenses',
-        selector: '[data-tour="expense-search-form"]',
-        placement: 'bottom',
-        title: 'Search & Filter Every Rupee',
-        description:
-          'Filter expenses by keyword, month, or category, or switch to Grid view for spreadsheet-style sorting.',
-      },
-      {
-        id: 'welcome-budgets',
-        route: '/budgets',
-        selector: '[data-tour="budget-columns"]',
-        placement: 'top',
-        title: 'Essential vs Flexible Budgets',
-        description: `Tinku splits your ${essentialCount} essential categories (like Rent, Groceries, Health) from ${flexibleCount} flexible ones so you always know what to protect first.`,
+          'Open Expenses, Budgets, Bills, AutoPay, Wishlist, Crisis Drill, or Groups from here. Each section will walk you through its controls on your first visit.',
       },
     ],
   },
 
-  navigation: {
-    id: 'navigation',
-    title: 'Application Navigation Tutorial',
-    subtitle: 'Learn where every menu, search shortcut, alert bell, and account control lives.',
-    estimatedTime: '2 min',
+  expenses: {
+    id: 'expenses',
+    route: '/expenses',
+    title: 'Expenses Tour',
+    subtitle: 'Track daily spending, filter by month or category, and switch between List and Grid views.',
+    estimatedTime: '1 min',
+    nextTourId: 'budgets',
+    nextLabel: 'Next: Budgets',
     steps: [
       {
-        id: 'nav-main',
-        route: '/',
-        selector: '[data-tour="sidebar-nav"]',
-        mobileSelector: '[data-tour="mobile-bottom-nav"]',
-        placement: 'right',
-        title: 'Main Navigation Sections',
-        description:
-          'Desktop keeps Track, Pay, Plan ahead, and Together sections pinned on the left. On smaller screens, use the bottom bar and More menu.',
-      },
-      {
-        id: 'nav-overview-pills',
-        route: '/',
-        selector: '[data-tour="overview-tabs"]',
+        id: 'exp-month-bar',
+        route: '/expenses',
+        selector: '[data-tour="expense-month-bar"]',
         placement: 'bottom',
-        title: 'Dashboard Quick Jumps',
+        title: 'Month Navigator & List / Grid Toggle',
         description:
-          'Switch straight from the Home overview to Expenses, Bills, Budgets, Wishlist, or Crisis Drill from the top pill bar.',
+          'Step through past months, check your total spent, and switch between daily grouped List cards and spreadsheet Grid sorting.',
       },
       {
-        id: 'nav-quick-add',
-        route: '/',
-        selector: '[data-tour="quick-add"]',
+        id: 'exp-search',
+        route: '/expenses',
+        selector: '[data-tour="expense-search-form"]',
+        placement: 'bottom',
+        title: 'Search & Category Filter',
+        description: `Search by merchant or note and narrow results down to any of Tinku’s ${totalCategories} categories.`,
+      },
+      {
+        id: 'exp-chips',
+        route: '/expenses',
+        selector: '[data-tour="expense-category-chips"]',
+        placement: 'bottom',
+        title: 'Quick Category Chips',
+        description:
+          'Your top active categories for the month appear here as one-click filter pills showing what each bucket cost.',
+      },
+      {
+        id: 'exp-add',
+        route: '/expenses',
+        selector: '[data-tour="expense-add-btn"]',
         mobileSelector: '[data-tour="mobile-quick-add"]',
-        placement: 'right',
-        title: 'Always-Available Quick Add',
+        placement: 'left',
+        title: 'Add or Scan Receipt',
         description:
-          'Record new day-to-day spending from any screen with one tap on Quick Add (or the floating + button on mobile).',
+          'Tap Add expense anytime to enter a purchase manually or upload a receipt photo—Tinku automatically updates your balance and budgets.',
       },
+    ],
+  },
+
+  budgets: {
+    id: 'budgets',
+    route: '/budgets',
+    title: 'Budgets Tour',
+    subtitle: 'Monitor category caps split clearly between Essential needs and Flexible spending.',
+    estimatedTime: '1 min',
+    nextTourId: 'bills',
+    nextLabel: 'Next: Bills',
+    steps: [
       {
-        id: 'nav-search',
-        route: '/',
-        selector: '[data-tour="header-search"]',
+        id: 'bud-overview',
+        route: '/budgets',
+        selector: '[data-tour="budget-overview"]',
         placement: 'bottom',
-        title: 'Top Search Bar',
+        title: 'Monthly Budget Pace',
         description:
-          'Click Search in the header anytime to jump directly to the Expenses search and filter bar.',
+          'See how much of your total monthly budget has been used, what remains, and how many days are left in the month.',
       },
       {
-        id: 'nav-notifications',
-        route: '/',
-        selector: '[data-tour="header-notifications"]',
+        id: 'bud-columns',
+        route: '/budgets',
+        selector: '[data-tour="budget-columns"]',
+        placement: 'top',
+        title: 'Essential vs Flexible Split',
+        description: `Essential budgets (${essentialCount} protected categories like Rent, Groceries, Health) stay separated from ${flexibleCount} Flexible categories. Bars turn amber at 80% and red over 100%.`,
+      },
+      {
+        id: 'bud-edit',
+        route: '/budgets',
+        selector: '[data-tour="budget-edit-btn"]',
+        placement: 'left',
+        title: 'Customize Monthly Limits',
+        description:
+          'Click Edit limits to set or update monthly caps for the categories your household tracks.',
+      },
+    ],
+  },
+
+  bills: {
+    id: 'bills',
+    route: '/bills',
+    title: 'Bills Tour',
+    subtitle: 'Keep recurring rent, utilities, and subscriptions organized with flexible payment modes.',
+    estimatedTime: '1 min',
+    nextTourId: 'autopay',
+    nextLabel: 'Next: AutoPay',
+    steps: [
+      {
+        id: 'bills-modes',
+        route: '/bills',
+        selector: '[data-tour="bills-modes"]',
         placement: 'bottom',
-        title: 'Notifications & Due Reminders',
+        title: 'Choose How Each Bill Is Paid',
         description:
-          'Upcoming bill reminders, AutoPay runs, and budget warnings show an unread badge on the bell icon.',
+          'Every bill can run in Reminder only, Manual approval (you tap Pay), or AutoPay (automatic within your approved limit).',
       },
       {
-        id: 'nav-theme',
-        route: '/',
-        selector: '[data-tour="header-theme"]',
+        id: 'bills-list',
+        route: '/bills',
+        selector: '[data-tour="bills-list"]',
+        placement: 'top',
+        title: 'Overdue, Upcoming & Paid Timeline',
+        description:
+          'Items needing action appear first so you can pay now, postpone 3 days, skip, or mark as paid elsewhere.',
+      },
+      {
+        id: 'bills-add',
+        route: '/bills',
+        selector: '[data-tour="bills-add-btn"]',
+        placement: 'left',
+        title: 'Add a Recurring Bill',
+        description:
+          'Create monthly, quarterly, or annual bills here so upcoming due dates automatically reserve cash on Home.',
+      },
+    ],
+  },
+
+  autopay: {
+    id: 'autopay',
+    route: '/autopay',
+    title: 'AutoPay Tour',
+    subtitle: 'Understand safety caps, explicit authorization, and due-date checks.',
+    estimatedTime: '1 min',
+    nextTourId: 'history',
+    nextLabel: 'Next: History',
+    steps: [
+      {
+        id: 'ap-steps',
+        route: '/autopay',
+        selector: '[data-tour="autopay-steps"]',
         placement: 'bottom',
-        title: 'Light & Dark Theme Switcher',
+        title: 'Safety-First AutoPay Rules',
         description:
-          'Toggle between Light and Dark themes right from the header, or pick System preference in Settings.',
+          'You set a maximum rupees cap and expiry date for each bill. Tinku never charges above your approved cap.',
       },
       {
-        id: 'nav-account',
-        route: '/',
-        selector: '[data-tour="header-account"]',
+        id: 'ap-list',
+        route: '/autopay',
+        selector: '[data-tour="autopay-list"]',
+        placement: 'top',
+        title: 'Pause, Resume & Adjust Limits',
+        description:
+          'View active mandates, inspect next execution dates, or pause/revoke any AutoPay rule instantly.',
+      },
+      {
+        id: 'ap-run',
+        route: '/autopay',
+        selector: '[data-tour="autopay-run-btn"]',
+        placement: 'left',
+        title: 'Run Scheduler Check',
+        description:
+          'Trigger today’s due-date check manually anytime to test how due AutoPay bills are verified and logged.',
+      },
+    ],
+  },
+
+  history: {
+    id: 'history',
+    route: '/history',
+    title: 'Payment History Tour',
+    subtitle: 'Review your full transaction ledger, payment providers, and statuses.',
+    estimatedTime: '1 min',
+    nextTourId: 'wishlist',
+    nextLabel: 'Next: Wishlist',
+    steps: [
+      {
+        id: 'hist-stats',
+        route: '/history',
+        selector: '[data-tour="history-stats"]',
         placement: 'bottom',
-        title: 'Account & Settings Access',
+        title: 'Payment Health Summary',
         description:
-          'Signed-in users find Settings, Security, and Log out in the account menu. Guests see Log in and Sign up buttons here.',
+          'Check verified payments, pending or failed attempts needing attention, and total payment attempts at a glance.',
       },
       {
-        id: 'nav-help-center',
-        route: '/',
-        selector: '[data-tour="sidebar-help"]',
-        mobileSelector: '[data-tour="mobile-more"]',
-        placement: 'right',
-        title: 'Help, Category Explorer & About',
+        id: 'hist-ledger',
+        route: '/history',
+        selector: '[data-tour="history-ledger"]',
+        placement: 'top',
+        title: 'Searchable Audit Ledger',
         description:
-          'Revisit tutorials, browse all categories interactively, restart any tour, or read about Tinku anytime from the sidebar Help & About links.',
+          'Inspect payee, INR and USD amounts, PayPal Sandbox vs Simulated provider, and whether a payment was AutoPay or manually approved.',
+      },
+    ],
+  },
+
+  wishlist: {
+    id: 'wishlist',
+    route: '/wishlist',
+    title: 'Wishlist & Goals Tour',
+    subtitle: 'Save toward planned purchases without ever touching emergency reserves or upcoming bills.',
+    estimatedTime: '1 min',
+    nextTourId: 'drill',
+    nextLabel: 'Next: Crisis Drill',
+    steps: [
+      {
+        id: 'wish-metrics',
+        route: '/wishlist',
+        selector: '[data-tour="wishlist-metrics"]',
+        placement: 'bottom',
+        title: 'Guilt-Free Surplus vs Protected Funds',
+        description:
+          'Tinku keeps your Emergency Reserve and next 14 days of bills locked first—only true leftover surplus counts toward unlocking goals.',
+      },
+      {
+        id: 'wish-add',
+        route: '/wishlist',
+        selector: '[data-tour="wishlist-header-action"]',
+        placement: 'left',
+        title: 'Add & Track Reward Goals',
+        description:
+          'Add items you want to buy safely, monitor percentage coverage in the table below, and fulfill unlocked goals in one click.',
+      },
+    ],
+  },
+
+  drill: {
+    id: 'drill',
+    route: '/drill',
+    title: 'Crisis Drill Tour',
+    subtitle: 'Simulate unexpected shocks and verify how long your household cash and essentials last.',
+    estimatedTime: '1 min',
+    nextTourId: 'groups',
+    nextLabel: 'Next: Groups',
+    steps: [
+      {
+        id: 'drill-sim',
+        route: '/drill',
+        selector: '[data-tour="drill-workspace"]',
+        placement: 'top',
+        title: 'Test Real Emergency Scenarios',
+        description:
+          'Pick a shock like a salary delay, medical bill, or income cut. Tinku shows how your reserve and trimming flexible categories protect essential bills.',
+      },
+    ],
+  },
+
+  groups: {
+    id: 'groups',
+    route: '/groups',
+    title: 'Groups Tour',
+    subtitle: 'Split shared rent, groceries, or trip expenses with flatmates and family.',
+    estimatedTime: '1 min',
+    nextTourId: 'category-discovery',
+    nextLabel: 'Explore Categories',
+    steps: [
+      {
+        id: 'groups-list',
+        route: '/groups',
+        selector: '[data-tour="groups-list"]',
+        placement: 'bottom',
+        title: 'Shared Ledgers & Net Position',
+        description:
+          'Each group card shows your net balance—whether others owe you or you owe them—and opens the itemized split history.',
+      },
+      {
+        id: 'groups-new',
+        route: '/groups',
+        selector: '[data-tour="groups-new-btn"]',
+        placement: 'left',
+        title: 'Create a New Group',
+        description:
+          'Start a group for your apartment, household groceries, or trip anytime and record equal or custom splits.',
       },
     ],
   },
 
   'category-discovery': {
     id: 'category-discovery',
-    title: 'Category Discovery Walkthrough',
-    subtitle: `Discover Tinku’s ${totalCategories} built-in categories (${spendingCount} daily spending, ${billCount} recurring bills) across screens.`,
-    estimatedTime: '2 min',
+    route: '/help',
+    title: 'Category Discovery & Help Tour',
+    subtitle: `Browse all ${totalCategories} built-in categories (${spendingCount} spending, ${billCount} bills) and navigation guides.`,
+    estimatedTime: '1 min',
     steps: [
       {
-        id: 'cat-dashboard-breakdown',
-        route: '/',
-        selector: '[data-tour="spending-donut"]',
-        placement: 'top',
-        title: '1. Spot Top Categories on Home',
-        description:
-          'The Spending card summarizes your current month and lists your top 4 spending categories so high-spend areas stand out right away.',
-      },
-      {
-        id: 'cat-expenses-select',
-        route: '/expenses',
-        selector: '[data-tour="expense-category-select"]',
-        placement: 'bottom',
-        title: '2. Browse & Select Any Category',
-        description: `Every one of Tinku’s ${totalCategories} categories (${CATEGORIES.slice(0, 4)
-          .map((c) => c.label)
-          .join(', ')}, and more) is available in the category dropdown on Expenses.`,
-      },
-      {
-        id: 'cat-expenses-search',
-        route: '/expenses',
-        selector: '[data-tour="expense-search-form"]',
-        placement: 'bottom',
-        title: '3. Combine Search with Category Filters',
-        description:
-          'Type any merchant, note, or item keyword alongside a selected category, then press Filter to narrow down matching transactions.',
-      },
-      {
-        id: 'cat-expenses-chips',
-        route: '/expenses',
-        selector: '[data-tour="expense-category-chips"]',
-        placement: 'bottom',
-        title: '4. One-Click Category Chips',
-        description:
-          'Top active categories for the selected month appear as quick-filter chips showing total spent per category. Click again to clear.',
-      },
-      {
-        id: 'cat-expenses-grid',
-        route: '/expenses',
-        selector: '[data-tour="expense-view-toggle"]',
-        placement: 'bottom',
-        title: '5. Switch Between List & Grid Views',
-        description:
-          'Use List for grouped daily receipts or switch to Grid for column filtering and sorting across categories.',
-      },
-      {
-        id: 'cat-budgets-columns',
-        route: '/budgets',
-        selector: '[data-tour="budget-columns"]',
-        placement: 'top',
-        title: '6. Essential vs Flexible Classification',
-        description: `Budgets separate ${essentialCount} Essential categories (protected in Crisis Drills) from ${flexibleCount} Flexible categories. Bars warn at 80% and alert past 100%.`,
-      },
-      {
-        id: 'cat-help-explorer',
+        id: 'cat-explorer',
         route: '/help',
         selector: '[data-tour="category-explorer"]',
         placement: 'top',
-        title: '7. Interactive Category Directory',
+        title: 'Interactive Category Directory',
+        description: `Search all ${totalCategories} categories, filter by Daily Spending vs Recurring Bills or Essential vs Flexible, and jump straight to filtered expenses or budgets.`,
+      },
+      {
+        id: 'help-nav',
+        route: '/help',
+        selector: '[data-tour="help-nav-map"]',
+        placement: 'top',
+        title: 'Full Navigation & Feature Guides',
         description:
-          'Filter all categories by Spending vs Bill or Essential vs Flexible here in the Help Center, inspect details, and jump directly to filtered expenses or budgets.',
+          'Revisit any page tour, read feature instructions, or check FAQs anytime from Help & Tutorials.',
       },
     ],
   },
 }
 
-export const TOUR_ORDER: TourId[] = ['welcome', 'navigation', 'category-discovery']
+export const TOUR_ORDER: TourId[] = [
+  'home',
+  'expenses',
+  'budgets',
+  'bills',
+  'autopay',
+  'history',
+  'wishlist',
+  'drill',
+  'groups',
+  'category-discovery',
+]
 
+export const PAGE_TOUR_BY_ROUTE: Record<string, TourId> = {
+  '/': 'home',
+  '/expenses': 'expenses',
+  '/budgets': 'budgets',
+  '/bills': 'bills',
+  '/autopay': 'autopay',
+  '/history': 'history',
+  '/wishlist': 'wishlist',
+  '/drill': 'drill',
+  '/groups': 'groups',
+}

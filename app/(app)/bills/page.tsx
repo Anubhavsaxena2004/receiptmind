@@ -95,14 +95,18 @@ export default async function BillsPage() {
         title="Bills"
         description="Overdue first, then what’s coming up and what you’ve paid. For each bill, choose how it gets paid."
         action={
-          <Link href="/bills/new" className={cn(buttonVariants({ size: 'lg', variant: 'default' }), 'gap-1.5 font-semibold shadow-sm')}>
+          <Link
+            href="/bills/new"
+            data-tour="bills-add-btn"
+            className={cn(buttonVariants({ size: 'lg', variant: 'default' }), 'gap-1.5 font-semibold shadow-sm')}
+          >
             <Plus className="size-4 stroke-[2.5]" /> Add a bill
           </Link>
         }
       />
 
       {/* Payment Modes Info Grid */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div data-tour="bills-modes" className="grid gap-3 sm:grid-cols-3">
         {(Object.keys(MODE_INFO) as PaymentMode[]).map((m) => {
           const { icon: Icon, label, description } = MODE_INFO[m]
           return (
@@ -119,18 +123,19 @@ export default async function BillsPage() {
         })}
       </div>
 
-      {views.length === 0 ? (
-        <EmptyState
-          icon={CalendarClock}
-          title="No bills configured yet"
-          description="Track recurring rent, electricity, mobile, and broadband bills. Tinku reminds you, requests your approval, or pays automatically."
-          action={{
-            label: 'Add a bill',
-            href: '/bills/new',
-          }}
-        />
-      ) : (
-        <div className="space-y-8">
+      <div data-tour="bills-list">
+        {views.length === 0 ? (
+          <EmptyState
+            icon={CalendarClock}
+            title="No bills configured yet"
+            description="Track recurring rent, electricity, mobile, and broadband bills. Tinku reminds you, requests your approval, or pays automatically."
+            action={{
+              label: 'Add a bill',
+              href: '/bills/new',
+            }}
+          />
+        ) : (
+          <div className="space-y-8">
           {/* Overdue / Action Needed */}
           <section aria-labelledby="overdue" className="space-y-3">
             <SectionHeader
@@ -208,6 +213,7 @@ export default async function BillsPage() {
           </section>
         </div>
       )}
+      </div>
     </div>
   )
 }

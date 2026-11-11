@@ -628,7 +628,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         </Card>
 
         {/* Bento Box 2: Earning & Financial Flow (Image 2 Earning Card) */}
-        <Card className="flex flex-col justify-between p-6 border-border bg-card shadow-xs rounded-3xl">
+        <Card data-tour="earning-card" className="flex flex-col justify-between p-6 border-border bg-card shadow-xs rounded-3xl">
           <div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -882,7 +882,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       {/* ──────────────────────────────────────────────────────────────────────────
           OPTIONAL: MONTHLY SPENDING TREND CHART (6-Month Full-Width Bento Section)
           ────────────────────────────────────────────────────────────────────────── */}
-      <Card className="p-6 border-border bg-card shadow-xs rounded-3xl">
+      <Card data-tour="spending-trend" className="p-6 border-border bg-card shadow-xs rounded-3xl">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
           <div>
             <h2 className="text-base font-bold text-foreground">Monthly Spending Trend</h2>

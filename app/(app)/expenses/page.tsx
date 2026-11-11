@@ -78,7 +78,11 @@ export default async function ExpensesPage({
         title="Expenses"
         description="Everything you’ve spent. Add one by hand or scan a receipt — Tinku files it under the right budget."
         action={
-          <Link href="/expenses/new" className={cn(buttonVariants({ size: 'lg', variant: 'default' }), 'font-semibold gap-1.5 shadow-sm')}>
+          <Link
+            href="/expenses/new"
+            data-tour="expense-add-btn"
+            className={cn(buttonVariants({ size: 'lg', variant: 'default' }), 'font-semibold gap-1.5 shadow-sm')}
+          >
             <Plus className="size-4 stroke-[2.5]" /> Add expense
           </Link>
         }
@@ -87,7 +91,7 @@ export default async function ExpensesPage({
       {sp.added && <Notice tone="success">Expense saved successfully.</Notice>}
 
       {/* Month Navigator, Total & View Mode Toggle */}
-      <Card className="p-4 shadow-sm border-border bg-card">
+      <Card data-tour="expense-month-bar" className="p-4 shadow-sm border-border bg-card">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-1.5">
             <Link

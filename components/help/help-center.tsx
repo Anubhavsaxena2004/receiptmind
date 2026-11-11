@@ -202,7 +202,7 @@ const FAQS = [
 ]
 
 export function HelpCenter() {
-  const { completedTours, startTour, openWelcome, resetTours } = useTour()
+  const { completedTours, autoTourPages, setAutoTourPages, startTour, openWelcome, resetTours } = useTour()
   const [activeFeature, setActiveFeature] = useState<(typeof FEATURE_TUTORIALS)[number]['id']>('expenses')
 
   const selectedFeature = FEATURE_TUTORIALS.find((f) => f.id === activeFeature) ?? FEATURE_TUTORIALS[0]
@@ -213,15 +213,22 @@ export function HelpCenter() {
       <Card className="rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-xs">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-border/70 pb-5">
           <div>
-            <p className="text-[11px] font-bold tracking-wider text-primary uppercase">Interactive Guided Tours</p>
+            <p className="text-[11px] font-bold tracking-wider text-primary uppercase">Progressive Feature Tours</p>
             <h2 className="mt-1 text-lg sm:text-xl font-extrabold tracking-tight text-foreground">
-              Learn Tinku Step by Step
+              Learn Every Feature Step by Step
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Launch an interactive spotlight walkthrough across real screens. Navigate freely with Next, Previous, or arrow keys.
+              Start with Home or jump to any section. Each tour explains what the page does and why it exists.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => startTour('home', 0, { enableAutoPages: true })}
+              className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'rounded-full px-4 font-bold gap-1.5')}
+            >
+              <Play className="size-3.5" /> Start Full App Flow
+            </button>
             <button
               type="button"
               onClick={openWelcome}
@@ -234,12 +241,27 @@ export function HelpCenter() {
               onClick={resetTours}
               className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'rounded-full px-3 text-xs font-semibold gap-1.5 text-muted-foreground hover:text-foreground')}
             >
-              <RotateCcw className="size-3.5" /> Restart Tour
+              <RotateCcw className="size-3.5" /> Reset All
             </button>
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
+        <label className="mt-4 flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-border bg-muted/25 px-4 py-3">
+          <div>
+            <p className="text-xs sm:text-sm font-bold text-foreground">Auto-guide new pages on first visit</p>
+            <p className="text-xs text-muted-foreground">
+              Show a page’s guided tour automatically the first time you visit it.
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={autoTourPages}
+            onChange={(e) => setAutoTourPages(e.target.checked)}
+            className="size-4 accent-[var(--primary)] cursor-pointer shrink-0"
+          />
+        </label>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {TOUR_ORDER.map((id) => {
             const track = TOURS[id]
             const done = completedTours.includes(id)
@@ -259,7 +281,7 @@ export function HelpCenter() {
                       </span>
                     )}
                   </div>
-                  <h3 className="mt-3 text-base font-bold text-foreground">{track.title}</h3>
+                  <h3 className="mt-2.5 text-sm font-bold text-foreground">{track.title}</h3>
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{track.subtitle}</p>
                 </div>
 
@@ -267,11 +289,11 @@ export function HelpCenter() {
                   type="button"
                   onClick={() => startTour(id)}
                   className={cn(
-                    buttonVariants({ variant: id === 'welcome' ? 'default' : 'outline', size: 'sm' }),
-                    'mt-4 w-full rounded-full font-bold gap-1.5',
+                    buttonVariants({ variant: id === 'home' ? 'default' : 'outline', size: 'sm' }),
+                    'mt-3.5 w-full rounded-full font-bold gap-1.5',
                   )}
                 >
-                  <Play className="size-3.5" /> {done ? 'Replay Walkthrough' : 'Start Walkthrough'}
+                  <Play className="size-3.5" /> {done ? 'Replay' : 'Start Tour'}
                 </button>
               </div>
             )
@@ -316,7 +338,7 @@ export function HelpCenter() {
       <CategoryExplorer />
 
       {/* Application Navigation Tutorial */}
-      <Card className="rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-xs">
+      <Card data-tour="help-nav-map" className="rounded-3xl border border-border bg-card p-5 sm:p-6 shadow-xs">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/70 pb-5">
           <div>
             <p className="text-[11px] font-bold tracking-wider text-primary uppercase">Navigation Map</p>
@@ -329,10 +351,10 @@ export function HelpCenter() {
           </div>
           <button
             type="button"
-            onClick={() => startTour('navigation')}
+            onClick={() => startTour('home')}
             className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'rounded-full px-4 font-bold gap-1.5 shrink-0 self-start sm:self-auto')}
           >
-            <Play className="size-3.5 text-primary" /> Run Navigation Tour
+            <Play className="size-3.5 text-primary" /> Tour Home & Navigation
           </button>
         </div>
 

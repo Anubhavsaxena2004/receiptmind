@@ -16,7 +16,9 @@ export default async function DrillPage() {
         title="Crisis drill"
         description="A fire drill for your money. Pick an emergency and see whether your real bills and budget would survive it — before it ever happens."
       />
-      <DrillClient input={input} pastDrills={db.drills.slice(0, 6)} />
+      <div data-tour="drill-workspace">
+        <DrillClient input={input} pastDrills={db.drills.slice(0, 6)} />
+      </div>
     </>
   )
 }

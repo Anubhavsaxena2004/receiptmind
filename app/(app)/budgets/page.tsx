@@ -96,7 +96,11 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
             <Link href="/expenses/new" className={cn(buttonVariants({ size: 'lg', variant: 'default' }), 'gap-1.5 font-semibold shadow-sm')}>
               <Plus className="size-4 stroke-[2.5]" /> Add expense
             </Link>
-            <Link href="/budgets/edit" className={cn(buttonVariants({ size: 'lg', variant: 'outline' }), 'gap-1.5 font-semibold')}>
+            <Link
+              href="/budgets/edit"
+              data-tour="budget-edit-btn"
+              className={cn(buttonVariants({ size: 'lg', variant: 'outline' }), 'gap-1.5 font-semibold')}
+            >
               <PencilLine className="size-4" /> Edit limits
             </Link>
           </div>
@@ -118,7 +122,7 @@ export default async function BudgetsPage({ searchParams }: { searchParams: Prom
       ) : (
         <>
           {/* Hero Overview Card */}
-          <Card className="p-6 shadow-sm border-border bg-card">
+          <Card data-tour="budget-overview" className="p-6 shadow-sm border-border bg-card">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{formatMonth(month)} Overview</p>

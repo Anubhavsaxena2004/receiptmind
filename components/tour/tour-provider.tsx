@@ -2,19 +2,23 @@
 
 import { createContext, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { TOURS, type TourId, type TourStep, type TourTrack } from '@/lib/tours'
+import { PAGE_TOUR_BY_ROUTE, TOURS, type TourId, type TourStep, type TourTrack } from '@/lib/tours'
 import { TourOverlay } from './tour-overlay'
 import { WelcomeModal } from './welcome-modal'
 
-const STORAGE_KEY = 'tinku:tour:v1'
+const STORAGE_KEY = 'tinku:tour:v2'
 
 interface StoredTourState {
   welcomeSeen: boolean
+  autoTourPages: boolean
+  seenRoutes: string[]
   completedTours: TourId[]
 }
 
 const DEFAULT_STORAGE: StoredTourState = {
   welcomeSeen: false,
+  autoTourPages: false,
+  seenRoutes: [],
   completedTours: [],
 }
 
@@ -26,22 +30,28 @@ interface TourContextValue {
   totalSteps: number
   welcomeOpen: boolean
   welcomeSeen: boolean
+  autoTourPages: boolean
   completedTours: TourId[]
-  startTour: (id: TourId, startAt?: number) => void
+  startTour: (id: TourId, startAt?: number, options?: { enableAutoPages?: boolean }) => void
+  startNextFeatureTour: () => void
   nextStep: () => void
   prevStep: () => void
   goToStep: (index: number) => void
-  skipTour: () => void
+  skipTour: (disableAutoPages?: boolean) => void
   finishTour: () => void
   dismissWelcome: () => void
   openWelcome: () => void
+  setAutoTourPages: (enabled: boolean) => void
   resetTours: () => void
 }
 
 const TourContext = createContext<TourContextValue | null>(null)
 
-function isTourId(value: string | null): value is TourId {
-  return value === 'welcome' || value === 'navigation' || value === 'category-discovery'
+function normalizeTourId(value: string | null): TourId | null {
+  if (!value) return null
+  if (value === 'welcome' || value === 'navigation') return 'home'
+  if (value in TOURS) return value as TourId
+  return null
 }
 
 function readStoredState(): StoredTourState {
@@ -50,10 +60,17 @@ function readStoredState(): StoredTourState {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (!raw) return DEFAULT_STORAGE
     const parsed = JSON.parse(raw) as Partial<StoredTourState>
-    const completed = Array.isArray(parsed.completedTours) ? parsed.completedTours.filter((x): x is TourId => isTourId(x)) : []
+    const completed = Array.isArray(parsed.completedTours)
+      ? parsed.completedTours.map((x) => normalizeTourId(String(x))).filter((x): x is TourId => x !== null)
+      : []
+    const seenRoutes = Array.isArray(parsed.seenRoutes)
+      ? parsed.seenRoutes.filter((r): r is string => typeof r === 'string')
+      : []
     return {
       welcomeSeen: Boolean(parsed.welcomeSeen),
-      completedTours: completed,
+      autoTourPages: Boolean(parsed.autoTourPages),
+      seenRoutes,
+      completedTours: [...new Set(completed)],
     }
   } catch {
     return DEFAULT_STORAGE
@@ -65,7 +82,7 @@ function writeStoredState(next: StoredTourState) {
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
   } catch {
-    // Ignore storage quota / privacy mode errors
+    // Ignore storage quota or private mode issues
   }
 }
 
@@ -76,8 +93,8 @@ function TourQueryListener({ onRequestTour }: { onRequestTour: (id: TourId) => v
   const handledRef = useRef<string | null>(null)
 
   useEffect(() => {
-    const tourParam = searchParams.get('tour')
-    if (!isTourId(tourParam)) {
+    const tourParam = normalizeTourId(searchParams.get('tour'))
+    if (!tourParam) {
       handledRef.current = null
       return
     }
@@ -106,6 +123,15 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   const [activeTour, setActiveTour] = useState<TourId | null>(null)
   const [stepIndex, setStepIndex] = useState(0)
 
+  const updateStorage = useCallback((updater: (prev: StoredTourState) => StoredTourState) => {
+    setStored((prev) => {
+      const next = updater(prev)
+      writeStoredState(next)
+      return next
+    })
+  }, [])
+
+  // Initial hydration & first-visit welcome dialog
   useEffect(() => {
     const initial = readStoredState()
     setStored(initial)
@@ -122,27 +148,51 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const updateStorage = useCallback((updater: (prev: StoredTourState) => StoredTourState) => {
-    setStored((prev) => {
-      const next = updater(prev)
-      writeStoredState(next)
-      return next
-    })
-  }, [])
+  // Progressive contextual trigger when visiting a page for the first time with autoTourPages enabled
+  useEffect(() => {
+    if (!mounted || welcomeOpen || activeTour) return
+    if (!stored.autoTourPages) return
+    const routeTour = PAGE_TOUR_BY_ROUTE[pathname]
+    if (!routeTour) return
+    if (stored.seenRoutes.includes(pathname) || stored.completedTours.includes(routeTour)) return
 
-  const markWelcomeSeen = useCallback(() => {
-    updateStorage((prev) => (prev.welcomeSeen ? prev : { ...prev, welcomeSeen: true }))
-  }, [updateStorage])
+    const timer = window.setTimeout(() => {
+      setActiveTour(routeTour)
+      setStepIndex(0)
+    }, 380)
+    return () => window.clearTimeout(timer)
+  }, [mounted, pathname, welcomeOpen, activeTour, stored.autoTourPages, stored.seenRoutes, stored.completedTours])
+
+  const markRouteAndTourSeen = useCallback(
+    (tourId: TourId, markCompleted: boolean, extraPatch?: Partial<StoredTourState>) => {
+      const route = TOURS[tourId]?.route
+      updateStorage((prev) => ({
+        ...prev,
+        welcomeSeen: true,
+        seenRoutes: route && !prev.seenRoutes.includes(route) ? [...prev.seenRoutes, route] : prev.seenRoutes,
+        completedTours:
+          markCompleted && !prev.completedTours.includes(tourId)
+            ? [...prev.completedTours, tourId]
+            : prev.completedTours,
+        ...extraPatch,
+      }))
+    },
+    [updateStorage],
+  )
 
   const startTour = useCallback(
-    (id: TourId, startAt = 0) => {
+    (id: TourId, startAt = 0, options?: { enableAutoPages?: boolean }) => {
       const track = TOURS[id]
       if (!track || track.steps.length === 0) return
       const clampedIndex = Math.max(0, Math.min(startAt, track.steps.length - 1))
       const step = track.steps[clampedIndex]
 
       setWelcomeOpen(false)
-      markWelcomeSeen()
+      updateStorage((prev) => ({
+        ...prev,
+        welcomeSeen: true,
+        autoTourPages: options?.enableAutoPages ?? prev.autoTourPages,
+      }))
       setActiveTour(id)
       setStepIndex(clampedIndex)
 
@@ -150,14 +200,13 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
         router.push(step.route)
       }
     },
-    [markWelcomeSeen, pathname, router],
+    [pathname, router, updateStorage],
   )
 
   const activeTrack = activeTour ? TOURS[activeTour] : null
   const totalSteps = activeTrack ? activeTrack.steps.length : 0
   const currentStep = activeTrack ? activeTrack.steps[stepIndex] ?? null : null
 
-  // Sync route whenever step changes
   useEffect(() => {
     if (!activeTour || !currentStep) return
     if (currentStep.route !== pathname) {
@@ -167,22 +216,40 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
 
   const finishTour = useCallback(() => {
     if (activeTour) {
-      updateStorage((prev) => ({
-        welcomeSeen: true,
-        completedTours: prev.completedTours.includes(activeTour)
-          ? prev.completedTours
-          : [...prev.completedTours, activeTour],
-      }))
+      markRouteAndTourSeen(activeTour, true)
     }
     setActiveTour(null)
     setStepIndex(0)
-  }, [activeTour, updateStorage])
+  }, [activeTour, markRouteAndTourSeen])
 
-  const skipTour = useCallback(() => {
-    markWelcomeSeen()
-    setActiveTour(null)
+  const startNextFeatureTour = useCallback(() => {
+    if (!activeTour) return
+    const current = activeTour
+    const nextId = TOURS[current]?.nextTourId
+    markRouteAndTourSeen(current, true)
+    if (!nextId) {
+      setActiveTour(null)
+      setStepIndex(0)
+      return
+    }
+    const nextTrack = TOURS[nextId]
+    setActiveTour(nextId)
     setStepIndex(0)
-  }, [markWelcomeSeen])
+    if (nextTrack && nextTrack.route !== pathname) {
+      router.push(nextTrack.route)
+    }
+  }, [activeTour, markRouteAndTourSeen, pathname, router])
+
+  const skipTour = useCallback(
+    (disableAutoPages = false) => {
+      if (activeTour) {
+        markRouteAndTourSeen(activeTour, false, disableAutoPages ? { autoTourPages: false } : undefined)
+      }
+      setActiveTour(null)
+      setStepIndex(0)
+    },
+    [activeTour, markRouteAndTourSeen],
+  )
 
   const nextStep = useCallback(() => {
     if (!activeTrack) return
@@ -207,17 +274,33 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
   )
 
   const dismissWelcome = useCallback(() => {
-    markWelcomeSeen()
+    updateStorage((prev) => ({
+      ...prev,
+      welcomeSeen: true,
+      autoTourPages: false,
+    }))
     setWelcomeOpen(false)
-  }, [markWelcomeSeen])
+  }, [updateStorage])
 
   const openWelcome = useCallback(() => {
     setActiveTour(null)
     setWelcomeOpen(true)
   }, [])
 
+  const setAutoTourPages = useCallback(
+    (enabled: boolean) => {
+      updateStorage((prev) => ({ ...prev, autoTourPages: enabled }))
+    },
+    [updateStorage],
+  )
+
   const resetTours = useCallback(() => {
-    const resetState: StoredTourState = { welcomeSeen: false, completedTours: [] }
+    const resetState: StoredTourState = {
+      welcomeSeen: false,
+      autoTourPages: true,
+      seenRoutes: [],
+      completedTours: [],
+    }
     setStored(resetState)
     writeStoredState(resetState)
     setActiveTour(null)
@@ -225,13 +308,12 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
     setWelcomeOpen(true)
   }, [])
 
-  // Keyboard navigation while tour overlay is active
   useEffect(() => {
     if (!activeTour) return
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault()
-        skipTour()
+        skipTour(false)
       } else if (e.key === 'ArrowRight') {
         e.preventDefault()
         nextStep()
@@ -253,8 +335,10 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       totalSteps,
       welcomeOpen,
       welcomeSeen: stored.welcomeSeen,
+      autoTourPages: stored.autoTourPages,
       completedTours: stored.completedTours,
       startTour,
+      startNextFeatureTour,
       nextStep,
       prevStep,
       goToStep,
@@ -262,6 +346,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       finishTour,
       dismissWelcome,
       openWelcome,
+      setAutoTourPages,
       resetTours,
     }),
     [
@@ -272,8 +357,10 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       totalSteps,
       welcomeOpen,
       stored.welcomeSeen,
+      stored.autoTourPages,
       stored.completedTours,
       startTour,
+      startNextFeatureTour,
       nextStep,
       prevStep,
       goToStep,
@@ -281,6 +368,7 @@ export function TourProvider({ children }: { children: React.ReactNode }) {
       finishTour,
       dismissWelcome,
       openWelcome,
+      setAutoTourPages,
       resetTours,
     ],
   )
@@ -308,4 +396,3 @@ export function useTour(): TourContextValue {
   }
   return ctx
 }
-

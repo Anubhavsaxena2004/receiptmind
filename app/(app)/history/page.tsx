@@ -32,7 +32,7 @@ export default async function HistoryPage() {
         description="Comprehensive audit ledger of all transaction attempts, payment methods, and provider verification statuses."
       />
 
-      <div className="grid gap-3 sm:gap-4 sm:grid-cols-3">
+      <div data-tour="history-stats" className="grid gap-3 sm:gap-4 sm:grid-cols-3">
         <StatCard
           label="Verified Payments"
           value={verified.length}
@@ -59,17 +59,19 @@ export default async function HistoryPage() {
         />
       </div>
 
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={History}
-          title="No payment records yet"
-          description="When you initiate or schedule bill payments through Tinku or PayPal Sandbox, completed and pending transactions will be recorded here."
-        />
-      ) : (
-        <div className="rounded-2xl border border-border bg-card p-1 shadow-sm overflow-hidden">
-          <LedgerGrid rows={rows} />
-        </div>
-      )}
+      <div data-tour="history-ledger">
+        {rows.length === 0 ? (
+          <EmptyState
+            icon={History}
+            title="No payment records yet"
+            description="When you initiate or schedule bill payments through Tinku or PayPal Sandbox, completed and pending transactions will be recorded here."
+          />
+        ) : (
+          <div className="rounded-2xl border border-border bg-card p-1 shadow-sm overflow-hidden">
+            <LedgerGrid rows={rows} />
+          </div>
+        )}
+      </div>
     </div>
   )
 }

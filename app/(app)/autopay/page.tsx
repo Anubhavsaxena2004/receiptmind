@@ -39,16 +39,18 @@ export default async function AutoPayPage({ searchParams }: { searchParams: Prom
         title="AutoPay"
         description="Bills Tinku pays for you on the due date, within limits you approved. Pause or cancel anytime."
         action={
-          <ActionButton action={runSchedulerNow} variant="outline" size="lg" className="gap-2 font-semibold shadow-2xs">
-            <Repeat className="size-4" /> Run today’s check now
-          </ActionButton>
+          <div data-tour="autopay-run-btn" className="inline-flex">
+            <ActionButton action={runSchedulerNow} variant="outline" size="lg" className="gap-2 font-semibold shadow-2xs">
+              <Repeat className="size-4" /> Run today’s check now
+            </ActionButton>
+          </div>
         }
       />
 
       {sp.authorized && <Notice tone="success">AutoPay authorized. Tinku will handle it on the next due date.</Notice>}
 
       {/* 4 Steps Banner */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div data-tour="autopay-steps" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {STEPS.map(([title, body], i) => (
           <div key={title} className="rounded-2xl border border-border bg-card p-4 shadow-2xs">
             <span className="flex size-7 items-center justify-center rounded-full bg-secondary text-xs font-bold text-secondary-foreground border border-primary/20">
@@ -60,7 +62,7 @@ export default async function AutoPayPage({ searchParams }: { searchParams: Prom
         ))}
       </div>
 
-      <div className="space-y-4">
+      <div data-tour="autopay-list" className="space-y-4">
         <SectionHeader title="Your AutoPay Bills" count={autopay.length} />
 
         {autopay.length === 0 ? (

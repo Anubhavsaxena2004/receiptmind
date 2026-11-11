@@ -9,23 +9,38 @@ import { cn } from '@/lib/utils'
 import { useTour } from './tour-provider'
 
 export function TourSettingsCard() {
-  const { completedTours, startTour, openWelcome, resetTours } = useTour()
+  const { completedTours, autoTourPages, setAutoTourPages, startTour, openWelcome, resetTours } = useTour()
 
   return (
     <Card>
       <CardHeader
-        title="Guided Tours & Tutorials"
-        description="Replay the first-time product walkthrough, learn navigation shortcuts, or explore spending categories interactively."
+        title="Guided Tours & Progressive Walkthroughs"
+        description="Replay any feature tour, enable automatic guides on first visits, or reset your onboarding progress."
       />
       <CardBody className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-3">
+        <label className="flex cursor-pointer items-start justify-between gap-4 rounded-2xl border border-border bg-muted/25 p-4">
+          <div>
+            <p className="text-sm font-bold text-foreground">Auto-guide features on first visit</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Automatically show each page’s short tour the first time you open Expenses, Budgets, Bills, AutoPay, Wishlist, Crisis Drill, or Groups.
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={autoTourPages}
+            onChange={(e) => setAutoTourPages(e.target.checked)}
+            className="mt-1 size-4 accent-[var(--primary)] cursor-pointer shrink-0"
+          />
+        </label>
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {TOUR_ORDER.map((id) => {
             const track = TOURS[id]
             const done = completedTours.includes(id)
             return (
               <div
                 key={id}
-                className="flex flex-col justify-between rounded-2xl border border-border bg-muted/25 p-4"
+                className="flex flex-col justify-between rounded-2xl border border-border bg-muted/25 p-3.5"
               >
                 <div>
                   <div className="flex items-center justify-between gap-2">
@@ -45,9 +60,9 @@ export function TourSettingsCard() {
                 <button
                   type="button"
                   onClick={() => startTour(id)}
-                  className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mt-4 w-full rounded-full font-semibold gap-1.5')}
+                  className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'mt-3.5 w-full rounded-full font-semibold gap-1.5')}
                 >
-                  <Play className="size-3.5 text-primary" /> {done ? 'Replay Tour' : 'Start Tour'}
+                  <Play className="size-3.5 text-primary" /> {done ? 'Replay' : 'Start Tour'}
                 </button>
               </div>
             )
@@ -68,7 +83,7 @@ export function TourSettingsCard() {
               onClick={resetTours}
               className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'rounded-full text-xs font-semibold gap-1.5 text-muted-foreground hover:text-foreground')}
             >
-              <RotateCcw className="size-3.5" /> Reset Tour Progress
+              <RotateCcw className="size-3.5" /> Reset & Restart Flow
             </button>
           </div>
 
@@ -83,4 +98,3 @@ export function TourSettingsCard() {
     </Card>
   )
 }
-

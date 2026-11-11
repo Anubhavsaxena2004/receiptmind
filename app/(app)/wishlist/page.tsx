@@ -42,7 +42,11 @@ export default async function WishlistPage() {
       <PageHeader
         title="Wishlist & Agentic Commerce"
         description="Turn budget savings into guilt-free rewards. Tinku AI unlocks your goals only when emergency reserves and upcoming bills are completely safe."
-        action={<WishlistForm />}
+        action={
+          <div data-tour="wishlist-header-action" className="inline-flex">
+            <WishlistForm />
+          </div>
+        }
       />
 
       {/* Channel3 AI Product Discovery Sponsor Integration Banner */}
@@ -71,7 +75,7 @@ export default async function WishlistPage() {
       </Card>
 
       {/* 3 Metrics: Liquidity Breakdown */}
-      <div className="mb-6 grid gap-3 sm:grid-cols-3">
+      <div data-tour="wishlist-metrics" className="mb-6 grid gap-3 sm:grid-cols-3">
         {/* Metric 1: Safe Guilt-Free Surplus */}
         <Card className="p-4 shadow-sm border-slate-200/80 dark:border-slate-800">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Available Guilt-Free Surplus</p>
