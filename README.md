@@ -1,93 +1,154 @@
-# Tinku — smart expenses & bill payments
+# Tinku — Smart Expenses & Bill Payments
 
-Tinku helps one person (or a household budget owner) track what they spend, plan the bills they expect, choose **per bill** how each one gets paid, and rehearse money emergencies before they happen.
-
-- **Track:** add expenses by hand or scan a receipt (Claude reads it, you check it).
-- **Plan:** monthly budgets, bills with due dates and repeats.
-- **Control:** every bill has its own payment mode: *Remind me*, *Ask before paying*, or *AutoPay* within a limit you approve.
-- **Collaborate:** groups for flatmates/family: split costs, see who owes whom, send reminders.
-- **Crisis drill** (flagship): a fire drill for your money. Pick an emergency (salary late, medical bill, job loss…) and Tinku simulates your real bills and budgets day by day, shows which bills would bounce, and builds a least-disruptive recovery plan.
+Tinku helps individuals and households track spending, manage recurring bills with per-bill payment control, scan receipts with AI, unlock guilt-free wishlist goals through agentic commerce, and rehearse financial emergencies before they happen.
 
 📄 **Feature flows, page by page (PDF):** [docs/Tinku-Feature-Flows.pdf](docs/Tinku-Feature-Flows.pdf)
 
-## Pages (one feature per page)
+---
 
-| Page | What you do there |
-|---|---|
-| **Home** `/` | See what needs you today: approvals, overdue bills, what's coming up |
-| **Expenses** `/expenses` | List by month; **Add expense** `/expenses/new` with receipt scan + duplicate check |
-| **Budgets** `/budgets` | Monthly limits per category, amber at 80%, red when over |
-| **Bills** `/bills` | All bills, soonest first, with Pay now / Postpone / Skip / Mark as paid |
-| **AutoPay** `/autopay` | Authorizations with limits; pause, resume, cancel; recent attempts |
-| **Payment history** `/history` | Every payment attempt and its verified status (AG Grid) |
-| **Crisis drill** `/drill` | Rehearse an emergency, see the recovery plan, save the drill |
-| **Groups** `/groups` | Shared expenses, who owes whom, mark paid, remind |
-| **Settings** `/settings` | Income, balance, reserve; connection status; demo tools |
+## Core Features & Pages
 
-## Run it
+| Page | Route | What it does |
+|---|---|---|
+| **Home** | `/` | Bento financial pulse: balance, reserve, dynamic monthly Spending ring & breakdown, Earning progress, upcoming bills, recent transactions, 6-month trend, and interactive guided tour |
+| **Expenses** | `/expenses` | Monthly expense ledger (list & AG Grid views), search, category filters, and duplicate detection |
+| **Add Expense / AI Scan** | `/expenses/new` | Upload a receipt image (`JPG/PNG/WEBP/GIF`) or `PDF` to auto-extract fields via Google Gemini Vision, or enter manually |
+| **Budgets** | `/budgets` | Monthly category spending caps with warning (`80%`) and over-budget alerts |
+| **Bills** | `/bills` | Bills sorted by due date with per-bill payment modes (*Remind me*, *Ask before paying*, *AutoPay*) and PayPal Sandbox checkout |
+| **AutoPay** | `/autopay` | Manage active mandates with spending limits, pause/resume/cancel controls, and execution history |
+| **Wishlist (Agentic Commerce)** | `/wishlist` | Tracks goal priorities against real `safeSurplus` (after 14-day bills & emergency reserve) and executes unlocked purchases |
+| **Crisis Drill** | `/drill` | Deterministic 30/60/90-day cash-flow stress test with a ranked, least-disruptive recovery plan |
+| **Groups** | `/groups` | Split household or flatmate bills, settle balances, and track member shares |
+| **Payment History** | `/history` | Full transaction & PayPal checkout audit ledger powered by AG Grid |
+| **Settings** | `/settings` | Income, balance, emergency reserve, Light/Dark theme switcher, connection status (`/settings?tab=connections`), and demo reset |
+| **Help & About** | `/help`, `/about` | App walkthroughs, architecture guide, and feature documentation |
 
-```bash
-pnpm install        # if corepack complains about keys: npx pnpm@12.3.4 install
-pnpm dev            # http://localhost:3000
+---
+
+## How PayPal Developer Platform Is Used (Sandbox)
+
+All PayPal requests run strictly server-side against `https://api-m.sandbox.paypal.com` inside [`lib/paypal.ts`](lib/paypal.ts) and [`lib/payments.ts`](lib/payments.ts); `PAYPAL_CLIENT_SECRET` never reaches the browser:
+
+- **OAuth 2.0 Client Credentials (`POST /v1/oauth2/token`):** Exchanges `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` for cached server bearer tokens.
+- **PayPal Orders v2 (`POST /v2/checkout/orders`):** Creates `CAPTURE`-intent checkout sessions for bill payments (converting INR to USD at a transparent `1 USD = ₹85` demo rate since PayPal India does not support domestic INR billing). Attaches `PayPal-Request-Id` for idempotency and `<userId>:<paymentId>` as `custom_id`.
+- **Server-Side Capture & Verification (`POST /v2/checkout/orders/{id}/capture`, `GET /v2/checkout/orders/{id}`):** On redirect back to `/api/paypal/return`, captures the approved order and verifies capture status (`COMPLETED`/`PENDING`), amount, currency, and `custom_id` before marking any bill occurrence settled.
+- **Signature-Verified Webhooks (`POST /v1/notifications/verify-webhook-signature`):** Listens on `POST /api/webhooks/paypal` for `PAYMENT.CAPTURE.*` events, validates PayPal transmission headers against `PAYPAL_WEBHOOK_ID`, deduplicates retries by event ID, and routes updates safely to the payment owner.
+- **Built-in Simulator Fallback:** If `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` are omitted locally, Tinku switches to a clearly labelled payment simulator following the exact same verification state machine.
+- **Future Production Scope:** Domestic INR bill settlement (BBPS) and Vault-backed live recurring mandates require an eligible merchant production account.
+
+---
+
+## How AI Is Used
+
+- **Multimodal Receipt & Bill OCR (`Google Gemini — gemini-flash-latest`):**
+  - Endpoint: `POST /api/receipts/extract` ([`app/api/receipts/extract/route.ts`](app/api/receipts/extract/route.ts)).
+  - Accepts images (`JPG`, `PNG`, `WEBP`, `GIF`) and `PDF` files up to 5 MB and calls Google’s `generativelanguage.googleapis.com` `generateContent` endpoint with JSON response mode.
+  - Extracts `is_receipt`, `merchant`, `total_amount`, `currency`, `date`, `category`, `confidence`, and `note`, strictly validated with **Zod** (`ReceiptSchema`) before pre-filling the expense form.
+  - Supports optional fallback providers (**OpenAI `gpt-4o-mini`** via `OPENAI_API_KEY` and **Anthropic `claude-3-5-sonnet-latest`** via `ANTHROPIC_API_KEY` / `@anthropic-ai/sdk`).
+- **Agentic Commerce Decision Engine ([`lib/agentic-commerce.ts`](lib/agentic-commerce.ts)):**
+  - Computes real `safeSurplus = max(0, currentBalance - due14DaysTotal - emergencyReserve)` and ranks wishlist goals by unlock status and priority so discretionary purchases only unlock when essential bills and savings remain protected.
+- **Deterministic Crisis Rehearsal ([`lib/rehearsal.ts`](lib/rehearsal.ts)):**
+  - Uses deterministic rupee math (no LLM hallucination risk) to simulate day-by-day liquidity over 30/60/90 days and construct an explainable recovery sequence.
+
+---
+
+## Tools, Tech Stack & Sponsor Integrations
+
+- **Render (Deployment & Hosting):** Production web service deployment configured via [`render.yaml`](render.yaml) (`pnpm install --frozen-lockfile && pnpm build` → `pnpm start`). Supports persistent disk (`TINKU_DATA_DIR`) or Upstash Redis.
+- **Postman (API Collection & Testing):** Repository includes [`postman_collection.json`](postman_collection.json) and [`postman_environment.example.json`](postman_environment.example.json) covering Tinku internal endpoints (`/api/scheduler/run`, `/api/paypal/return`, `/api/webhooks/paypal`, `/api/receipts/extract`) and direct PayPal Sandbox Orders v2 REST requests.
+- **AG Grid Community (`ag-grid-react` / `ag-grid-community`):** Interactive data grids for Payment History (`/history`) and Expenses Grid view (`/expenses?view=grid`).
+- **Zapier (`ZAPIER_WEBHOOK_URL`):** Forwards notifications (bill reminders, verified payments, budget alerts) to a Zapier Catch Hook for downstream email/Slack/WhatsApp workflows.
+- **Upstash Redis (`UPSTASH_REDIS_REST_URL` / `KV_REST_API_URL`):** Multi-instance cloud persistence with optimistic concurrency checks and local JSON fallback (`data/db.json`) for single-node local runs.
+- **Frontend & Backend Framework:** Next.js `16.3.3` (App Router + Server Actions), React `19`, TypeScript `5.7`, Tailwind CSS `v4`, `@base-ui/react`, `next-themes`, `lucide-react`, `zod`.
+
+---
+
+## Local Setup Instructions
+
+### Prerequisites
+- **Node.js 20+** and **pnpm 12+** (`corepack enable` or `npx pnpm@12.3.4`)
+
+### Steps
+1. **Clone the repository and install dependencies:**
+   ```bash
+   git clone https://github.com/Anubhavsaxena2004/receiptmind.git
+   cd receiptmind
+   pnpm install
+   ```
+2. **Configure environment variables:**
+   ```bash
+   cp .env.example .env.local
+   ```
+   Fill in any integrations you want active (all optional — the app works with zero keys in demo/simulator mode):
+   - **PayPal Sandbox:** `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`, `PAYPAL_API_BASE=https://api-m.sandbox.paypal.com`
+   - **AI Receipt Scanning:** `GEMINI_API_KEY` and `GEMINI_MODEL=gemini-flash-latest` (or `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`)
+   - **Storage (optional for local):** `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` (defaults to local `./data/db.json`)
+   - **Optional Integrations:** `APP_URL=http://localhost:3000`, `ZAPIER_WEBHOOK_URL`, `CRON_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`
+
+3. **Run the development server:**
+   ```bash
+   pnpm dev
+   ```
+   Open [http://localhost:3000](http://localhost:3000).
+
+4. **Run automated payment flow tests:**
+   ```bash
+   pnpm test
+   ```
+
+---
+
+## Deploying on Render
+
+Tinku is deployed using **Render**. You can deploy your own instance via **Render Blueprint** ([`render.yaml`](render.yaml)) or manually as a **Render Web Service**:
+
+1. **Connect Repository:** Push/fork this repo on GitHub and create a new **Web Service** (or **Blueprint** using `render.yaml`) in the Render Dashboard.
+2. **Build & Start Commands:**
+   - **Build Command:** `pnpm install --frozen-lockfile && pnpm build`
+   - **Start Command:** `pnpm start`
+   - **Health Check Path:** `/`
+3. **Environment Variables:** Add the variables from `.env.example` in **Render → Environment**:
+   - Set `APP_URL` to your Render service URL (`https://<your-app>.onrender.com`) so PayPal Sandbox return URLs work cleanly.
+   - Add `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`, and `GEMINI_API_KEY` (`GEMINI_MODEL=gemini-flash-latest`).
+4. **Persistent Storage (Recommended on Render):**
+   - Attach an **Upstash Redis** instance (`UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`) **or** mount a Render Persistent Disk and set `TINKU_DATA_DIR=/var/data` (otherwise Render's ephemeral disk resets between deploys/restarts).
+5. **Optional Daily Cron Job:**
+   - Create a Render Cron Job calling:
+     ```bash
+     curl -X POST -H "Authorization: Bearer $CRON_SECRET" https://<your-app>.onrender.com/api/scheduler/run
+     ```
+   - *(Note: Free Render instances spin down after idle periods; load `/` once to wake the container before live demos.)*
+
+---
+
+## Quick Demo Guide (for Reviewers & Judges)
+
+1. **Guest Mode / Instant Sign Up:** Explore `/` immediately in sample mode, or sign up at `/signup` with any test email — `/verify` displays the 6-digit demo verification code directly on screen when `RESEND_API_KEY` is unset. Click **"Or try with sample data"** to populate realistic household records.
+2. **AI Receipt Scan:** Go to `/expenses/new`, upload any receipt image or PDF, and review Gemini’s extracted merchant, amount, date, and budget category.
+3. **PayPal Sandbox Checkout:** On `/bills`, click **Pay with PayPal** on any due bill, sign in with a PayPal Sandbox Personal (Buyer) account, approve checkout, and confirm server-verified capture on `/payments/[id]`.
+4. **Wishlist & Crisis Drill:** Add a goal in `/wishlist` to inspect live surplus unlock eligibility, then run an emergency shock simulation in `/drill`.
+5. **Connection Check:** Visit `/settings?tab=connections` to verify active PayPal Sandbox, webhook, and Gemini configurations.
+
+---
+
+## Code Map
+
+```text
+app/                 Next.js App Router pages & API routes (/api/paypal/*, /api/webhooks/paypal, /api/receipts/extract, /api/scheduler/run)
+components/          Shared UI components, AppShell, interactive TourProvider, AG Grid views, chart components
+lib/db.ts            Persistence layer (Upstash Redis with concurrency protection or local JSON file store)
+lib/paypal.ts        Server-side PayPal Sandbox OAuth2, Orders v2 & webhook signature verification client
+lib/payments.ts      Idempotent payment creation, server-side capture verification, and bill settlement
+lib/agentic-commerce.ts  Wishlist safe-surplus & purchase recommendation engine
+lib/rehearsal.ts     Deterministic 30/60/90-day Crisis Drill & recovery plan simulator
+lib/scheduler.ts     Daily reminder & rule-governed AutoPay runner
+lib/actions/         Next.js Server Actions for bills, expenses, budgets, wishlist, groups & auth
+render.yaml          Render Web Service deployment blueprint
+postman_collection.json  Postman collection for internal APIs & PayPal Sandbox endpoints
 ```
 
-No keys are needed. Demo data is created on first load (dated around today) and saved to `data/db.json` (or to Upstash Redis when configured; see Deploy). **Settings → Reset demo** restores it.
+---
 
-Optional keys go in `.env.local`. See [.env.example](.env.example).
+## License
 
-## How payments work (and what we do *not* claim)
-
-PayPal India can't take domestic payments and doesn't support INR subscriptions, so:
-
-- **Pay now** runs a real **PayPal Sandbox** checkout when `PAYPAL_CLIENT_ID/SECRET` are set: the order is created on the server, the buyer approves on PayPal, and the server captures and **verifies** the result (status, amount, currency, our payment id). The INR bill is charged as its USD equivalent at a fixed, clearly shown demo rate (₹85 = $1).
-- Without keys, a **labelled simulator** stands in for the PayPal approval screen. Same flow, same verification path.
-- A bill is marked paid **only** after a verified provider result. Never on a button click or a closed popup.
-- Idempotency everywhere: `PayPal-Request-Id` on create/capture, one AutoPay attempt per bill occurrence, webhook events de-duplicated by id, a verified capture is never downgraded.
-- Webhooks (`/api/webhooks/paypal`) are signature-verified with PayPal before anything changes.
-- Real Indian bill settlement (BBPS partner) and INR recurring mandates are **future scope**, and the app says so where it matters.
-
-### AutoPay rules
-On the due date the daily check pays an AutoPay bill only if the authorization is **active**, **not expired**, and the amount is **within the limit**. Otherwise the bill moves to "Needs you" with the reason. Failed charges are **never retried automatically**. *Postpone* and *Skip* change only that one payment, never the whole schedule. AutoPay charges are simulated in this MVP (production would use PayPal Vault on an eligible merchant account).
-
-The daily check runs when the app is opened each day, and via `POST /api/scheduler/run` with `Authorization: Bearer $CRON_SECRET` (for a cron job).
-
-## Crisis drill: how it works
-A deterministic day-by-day cash-flow simulation (`lib/rehearsal.ts`) over 30/60/90 days using your balance, salary day, bills and spending budgets. Essential bills are paid first. The recovery plan is built least-disruptive first: emergency reserve → halve flexible spending → pause non-essential bills → ask family/flatmates for the remainder. The rupee maths is plain code, not AI, so it is always exact and explainable.
-
-## 90-second demo for judges
-1. **Home:** "Mobile recharge needs approval". Click **Pay now** → review screen (shows INR, USD charge, demo label) → approve → **Payment verified** with a full timeline.
-2. **Bills:** show the three payment modes side by side.
-3. **AutoPay:** the subscription was paid automatically today. Settings → *Make the next simulated charge fail*, then **Run today's check** to show a failure that stays unpaid and isn't retried.
-4. **Crisis drill:** pick *Medical emergency ₹12,000*: "You'd run short by ₹…". Show the bills at risk, then the recovery plan making it pass. Try *Salary 30 days late* to show a bigger plan with a group contribution.
-5. **Expenses → Add:** scan a receipt (with `ANTHROPIC_API_KEY`), then save the same expense twice to show duplicate detection.
-
-## Deploy (Vercel)
-1. Import the GitHub repo in Vercel (framework: Next.js; defaults are fine).
-2. **Add storage:** project → **Storage → Upstash for Redis → Connect** (free tier is enough). Vercel adds `KV_REST_API_URL` and `KV_REST_API_TOKEN`, and Tinku saves its data there. Redeploy after connecting.
-3. Optional: add `APP_URL`, PayPal, `ANTHROPIC_API_KEY`, `ZAPIER_WEBHOOK_URL`, `CRON_SECRET` from [.env.example](.env.example).
-
-Without Redis the site still works, but Vercel can't write files: data lives in temporary `/tmp`, can reset, and separate server instances don't share changes. A yellow bar and **Settings → Data storage** say so.
-
-## Deploy (Render)
-- **Web service:** build `pnpm install && pnpm build`, start `pnpm start`. Set `APP_URL` and any keys.
-- **Data:** Render's disk is temporary. Attach a persistent disk and set `TINKU_DATA_DIR` to it, or swap `lib/db.ts` for Postgres (the rest of the app only calls `readDb()` / `updateDb()`).
-- **Cron job:** daily `curl -X POST -H "Authorization: Bearer $CRON_SECRET" $APP_URL/api/scheduler/run`.
-- Free instances sleep when idle, so open the app before a live demo.
-
-## Sponsor tools
-- **AG Grid** (Community): the Payment history table.
-- **Zapier:** set `ZAPIER_WEBHOOK_URL` to a Catch Hook; every notification is forwarded. Zapier only does notifications/logging, never payment decisions.
-- **Postman:** good for testing `/api/scheduler/run`, `/api/webhooks/paypal` and the PayPal Sandbox Orders API.
-- **Bryntum** is licence-gated (private npm registry), so it isn't installed. The bill timeline on Bills/Home is where a Bryntum Scheduler would slot in.
-
-## Code map
-```
-app/                 one folder per page; api/ for PayPal return/cancel/webhook, scheduler, receipts
-components/          app shell, status badges, buttons, small UI parts
-lib/db.ts            data store: Upstash Redis (conflict-checked) or a JSON file
-lib/payments.ts      checkout, verification, the single place payment outcomes are applied
-lib/paypal.ts        PayPal Orders v2 + webhook verification (server only)
-lib/scheduler.ts     daily reminders and AutoPay rules
-lib/rehearsal.ts     crisis drill engine + recovery plan
-lib/actions/         server actions used by the forms and buttons
-```
+This project is open source and licensed under the **MIT License** (OSI-approved). See [`LICENSE`](LICENSE) for full details.
